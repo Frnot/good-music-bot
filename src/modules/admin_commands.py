@@ -55,8 +55,8 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
                 log.debug(f"executing command: chmod +x -R scripts")
                 os.system("chmod +x -R scripts")
 
-            log.debug(f"executing command: \"{sys.executable}\" -m pip install .")
-            os.system(f"\"{sys.executable}\" -m pip install .")
+            log.debug(f"executing command: \"{sys.executable}\" -m pip install ..")
+            os.system(f"\"{sys.executable}\" -m pip install ..")
 
             log.info("Updates done. Restarting main process")
 

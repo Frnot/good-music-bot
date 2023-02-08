@@ -15,6 +15,7 @@ from modules.music import Music
 
 log = logging.getLogger(__name__)
 
+# gets version from installed package
 version = metadata.version('good_music_bot')
 
 
