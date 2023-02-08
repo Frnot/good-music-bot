@@ -1,0 +1,27 @@
+Metadata-Version: 2.1
+Name: good-music-bot
+Version: 0.2.2
+Summary: A discord music bot powered by discord.py
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+
+# good-music-bot
+a not awful discord music bot
+
+run `pip install .` to install required dependencies
+
+### API docs
+https://discordpy.readthedocs.io/en/latest/api.html#
+
+
+
+--------------------------------------------------------
+
+## linux dependencies ##
+
+* python3 
+* python3-devel
+* libffi-dev
+* ffmpeg, 
+* git (for automatic updates)
+* tmux (for interactable autostart)
