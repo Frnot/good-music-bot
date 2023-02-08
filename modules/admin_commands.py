@@ -2,14 +2,13 @@ import os
 import sys
 import discord
 from discord.ext import commands
-import utils.admin
 import utils.general
 import logging
 log = logging.getLogger(__name__)
 
 restart = False
 
-class Cog(commands.Cog, name='Admin Commands'):
+class AdminCommands(commands.Cog, name='Admin Commands'):
     def __init__(self, bot):
         self.bot = bot
         log.info(f"Registered Cog: {self.qualified_name}")

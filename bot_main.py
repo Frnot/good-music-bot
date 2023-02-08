@@ -9,7 +9,8 @@ else:
     import importlib_metadata as metadata
 
 # Import modules
-from modules import admin_commands, music
+from modules.admin_commands import AdminCommands
+from modules.music import Music
 
 
 log = logging.getLogger(__name__)
@@ -22,31 +23,26 @@ version = metadata.version('good_music_bot')
 def run_bot(bot_token):
     log.info(f"Running version v{version}")
 
+    #intents = discord.Intents.default()
+    #intents.message_content = True
+
     # Create bot
     global bot
-    bot = Bot(command_prefix=guild_prefix, intents=discord.Intents.all(),
+    bot = Bot(command_prefix=dcommands.when_mentioned_or("."), intents=discord.Intents.all(),
               activity=discord.Activity(name=f"v{version}", type=discord.ActivityType.playing))
 
-    # Load modules
-    bot.add_cog(modules.admin_commands.Cog(bot))
-    bot.add_cog(commands.general.Cog(bot))
-
-    bot.add_cog(music.Cog(bot))
+    
 
     # Run bot
     bot.run(bot_token)
 
-    # Cleanup
-    db.close()
-
-
-
-async def guild_prefix(bot, message):
-    bot
-    prefix_return = await bot.get_cog('Prefix').get(message.guild.id)
-    return dcommands.when_mentioned_or(prefix_return)(bot, message)
 
 
 class Bot(dcommands.Bot):
     async def on_ready(self):
         log.info(f"Logged on as {bot.user}!\nReady.")
+
+    async def setup_hook(self):
+        # Load modules
+        await bot.add_cog(AdminCommands(bot))
+        await bot.add_cog(Music(bot))

@@ -1,8 +1,8 @@
-import queue
 import logging
 from logging.handlers import QueueHandler, QueueListener
+import os
+import queue
 
-# TODO: use MemoryHandler to save RPi SD cards (for debug especially)
 
 
 def init(debug, quiet):
@@ -27,6 +27,9 @@ def init(debug, quiet):
     handlers.append(std_out)
 
     if not quiet:
+        if not os.path.exists('logs'):
+            os.makedirs('logs')
+
         log_file = logging.FileHandler('logs/bot.log', mode='w', encoding="UTF-8")
         log_file.setLevel(logging.INFO)
         log_file.setFormatter(format)
