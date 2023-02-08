@@ -2,8 +2,10 @@ import os
 import sys
 import discord
 from discord.ext import commands
-import utils.general
 import logging
+
+import utils.general
+
 log = logging.getLogger(__name__)
 
 restart = False
@@ -64,8 +66,11 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
     # Set status
     @commands.command()
     @commands.is_owner()
-    async def status(self, ctx, action: utils.general.to_lower, status):
-        if action == "playing":
+    async def status(self, ctx, action: utils.general.to_lower, status = None):
+        if action == "clear":
+            actiontype = discord.ActivityType.playing
+            status = f"v{self.bot.version()}"
+        elif action == "playing":
             actiontype = discord.ActivityType.playing
         elif action == "streaming":
             actiontype = discord.ActivityType.streaming

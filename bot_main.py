@@ -18,8 +18,6 @@ log = logging.getLogger(__name__)
 version = metadata.version('good_music_bot')
 
 
-
-
 def run_bot(bot_token):
     log.info(f"Running version v{version}")
 
@@ -30,8 +28,6 @@ def run_bot(bot_token):
     global bot
     bot = Bot(command_prefix=dcommands.when_mentioned_or("."), intents=discord.Intents.all(),
               activity=discord.Activity(name=f"v{version}", type=discord.ActivityType.playing))
-
-    
 
     # Run bot
     bot.run(bot_token)
@@ -46,3 +42,6 @@ class Bot(dcommands.Bot):
         # Load modules
         await bot.add_cog(AdminCommands(bot))
         await bot.add_cog(Music(bot))
+
+    def version(self):
+        return version
