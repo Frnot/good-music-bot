@@ -14,7 +14,6 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
         log.info(f"Registered Cog: {self.qualified_name}")
 
 
-
     # Leave server
     @commands.command()
     @commands.is_owner()
@@ -22,14 +21,6 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
         log.info(f"Recieved leave command in guild {ctx.guild.name}")
         await ctx.message.add_reaction("✅")
         await ctx.guild.leave()
-
-    @leave.error
-    async def leave_error(self, ctx, exception):
-        if isinstance(exception, commands.NotOwner):
-            await ctx.send("Fuck you!")
-        else:
-            await ctx.send(f"error: {exception}")
-
 
 
     # Shutdown
@@ -39,14 +30,6 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
         log.info("Received shutdown command")
         await ctx.message.add_reaction("✅")
         await ctx.bot.close()
-
-    @die.error
-    async def shutdown_error(self, ctx, exception):
-        if isinstance(exception, commands.NotOwner):
-            await ctx.send("Fuck you!")
-        else:
-            await ctx.send(f"error: {exception}")
-
 
 
     # Install Updates
@@ -77,14 +60,6 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
 
         await ctx.bot.close()
 
-    @update.error
-    async def update_error(self, ctx, exception):
-        if isinstance(exception, commands.NotOwner):
-            await ctx.send("Fuck you!")
-        else:
-            await ctx.send(f"error: {exception}")
-
-
 
     # Set status
     @commands.command()
@@ -106,8 +81,12 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
         log.info(f"setting status to {actiontype.name} `{status}`")
         await utils.general.send_confirmation(ctx)
 
+
+    @leave.error
+    @die.error
+    @update.error
     @status.error
-    async def status_error(self, ctx, exception):
+    async def error(self, ctx, exception):
         if isinstance(exception, commands.NotOwner):
             await ctx.send("Fuck you!")
         else:

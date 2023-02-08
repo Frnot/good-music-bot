@@ -7,5 +7,5 @@ def to_lower(input):
 
 async def send_confirmation(ctx):
     # Confirm command (and delete command 30 seconds later)
-    await ctx.message.add_reaction("✅")
+    await ctx.message.add_reaction("🫡")
     await ctx.message.delete(delay=30)
