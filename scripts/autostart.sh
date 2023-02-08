@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Make script executable
-# chmod +x authostart.sh
+# chmod +x autostart.sh
 
 # Put file in crontab
 # @reboot sleep 30 && /<bot_directory_path>/scripts/autostart.sh
