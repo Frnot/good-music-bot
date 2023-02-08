@@ -43,6 +43,7 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
 
         async with ctx.channel.typing():
             await ctx.send("Updating...")
+            self.status(ctx, "streaming", "update")
             log.info("Running Updates")
 
             log.debug("executing command: git stash")
@@ -52,8 +53,8 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
             os.system("git pull")
 
             if sys.platform.startswith('linux'):
-                log.debug(f"executing command: chmod +x -R scripts")
-                os.system("chmod +x -R scripts")
+                log.debug(f"executing command: chmod +x -R ../scripts")
+                os.system("chmod +x -R ../scripts")
 
             log.debug(f"executing command: \"{sys.executable}\" -m pip install ..")
             os.system(f"\"{sys.executable}\" -m pip install ..")
