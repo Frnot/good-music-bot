@@ -16,12 +16,22 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
         log.info(f"Registered Cog: {self.qualified_name}")
 
 
+    @commands.command()
+    @commands.is_owner()
+    async def invite(self, ctx):
+        """Generate invite link for bot"""
+        permission = 8
+        invite_link = f"https://discord.com/oauth2/authorize?client_id={self.bot.user.id}&scope=bot&permissions={permission}"
+        log.info(f"Recieved invite command in guild {ctx.guild.name}")
+        await ctx.send(invite_link)
+
+
     # Leave server
     @commands.command()
     @commands.is_owner()
     async def leave(self, ctx):
         log.info(f"Recieved leave command in guild {ctx.guild.name}")
-        await ctx.message.add_reaction("✅")
+        await utils.general.send_confirmation(ctx)
         await ctx.guild.leave()
 
 
@@ -30,7 +40,7 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
     @commands.is_owner()
     async def die(self, ctx):
         log.info("Received shutdown command")
-        await ctx.message.add_reaction("✅")
+        await utils.general.send_confirmation(ctx)
         await ctx.bot.close()
 
 
