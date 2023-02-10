@@ -103,7 +103,10 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
     @update.error
     @status.error
     async def error(self, ctx, exception):
+        log.debug(exception)
         if isinstance(exception, commands.NotOwner):
             await ctx.send("Fuck you!")
+        elif isinstance(exception, commands.MissingRequiredArgument):
+            await ctx.send("Error: command missing required argument")
         else:
             await ctx.send(f"error: {exception}")
