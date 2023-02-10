@@ -92,7 +92,6 @@ class Music(commands.Cog, name='Music'):
     @commands.command()
     async def skip(self, ctx):
         ctx.voice_client.stop()
-        self.songqueue.clear()
         await utils.general.send_confirmation(ctx)
 
 
@@ -133,6 +132,7 @@ class Music(commands.Cog, name='Music'):
     async def stop(self, ctx):
         """Stops and disconnects the bot from voice"""
         await ctx.voice_client.disconnect()
+        self.songqueue.clear()
         await utils.general.send_confirmation(ctx)
 
 
