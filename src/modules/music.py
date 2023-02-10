@@ -82,8 +82,8 @@ class Music(commands.Cog, name='Music'):
     async def queue(self, ctx):
         if sq:= self.songqueue.show():
             tracklist = ""
-            for idx,element in enumerate(sq):
-                tracklist += f"{idx+1}:  {element.title}\n"
+            for idx,track in enumerate(sq):
+                tracklist += f"{idx+1} :  [{track.title}]({track.url})\n"
             msg = Embed(
                 title = f"Queued tracks:",
                 description = tracklist,
