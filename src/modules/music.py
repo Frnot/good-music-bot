@@ -90,8 +90,22 @@ class Music(commands.Cog, name='Music'):
 
 
     @commands.command()
-    async def skip(self, ctx):
-        ctx.voice_client.stop()
+    async def skip(self, ctx, num = None):
+        if not num:
+            ctx.voice_client.stop()
+            await utils.general.send_confirmation(ctx)
+        else:
+            try:
+                self.songqueue.pop(int(num)-1)
+                ctx.voice_client.stop()
+                await utils.general.send_confirmation(ctx)
+            except:
+                await ctx.send("Error: please enter a valid index number")
+
+
+    @commands.command()
+    async def clear(self, ctx):
+        self.songqueue.clear()
         await utils.general.send_confirmation(ctx)
 
 
@@ -226,6 +240,12 @@ class PseudoQueue:
         self.inflight = self.list[0]
         del self.list[0]
         return self.inflight
+
+    def pop(self, n):
+        if not n < len(self.list):
+            raise IndexError
+        self.list = self.list[n:]
+            
 
     def put(self, item):
         self.list.append(item)
