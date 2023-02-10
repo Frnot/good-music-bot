@@ -12,14 +12,13 @@ import utils.general
 
 log = logging.getLogger(__name__)
 
-# TODO: leave chat when everyone leaves
-# TODO: embed messages
 # TODO: add "now playing"
 # TODO:     add current place in track
 # TODO: add seekability
 # TODO: add guild independant queues
 # TODO: add playlist support
 # TODO: clear queue when disconnected
+# TODO: print error to chat when cant play song (comethazine)
 
 
 
@@ -127,6 +126,17 @@ class Music(commands.Cog, name='Music'):
             else:
                 await ctx.send("You are not connected to a voice channel.")
                 raise commands.CommandError("Author not connected to a voice channel.")
+
+    
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        """Disconnects bot from voice channel if no users are connected"""
+        if after.channel is None:
+            if vc := member.guild.voice_client:
+                if not len(vc.channel.members) > 1:
+                    await vc.disconnect()
+
+
 
 
 
