@@ -16,7 +16,6 @@ log = logging.getLogger(__name__)
 # TODO: add seekability
 # TODO: add guild independant queues
 # TODO: add playlist support
-# TODO: print error to chat when cant play song (comethazine)
 # TODO: add jump command to skip the queue
 
 
@@ -52,7 +51,10 @@ class Music(commands.Cog, name='Music'):
         else:
             while not self.songqueue.empty():
                 track = self.songqueue.get()
-                ctx.voice_client.play(track, after=lambda e: print(f'Player error: {e}') if e else None)
+                try:
+                    ctx.voice_client.play(track, after=lambda e: print(f'Player error: {e}') if e else None)
+                except Exception as e:
+                    log.info(f"Encountered error:{e}")
                 await self.np(ctx)
                 track.start_time = time()
 
@@ -142,6 +144,14 @@ class Music(commands.Cog, name='Music'):
             else:
                 await ctx.send("You are not connected to a voice channel.")
                 raise commands.CommandError("Author not connected to a voice channel.")
+
+    
+    @play.error
+    async def error(self, ctx, exception):
+        if isinstance(exception, youtube_dl.utils.DownloadError) or isinstance(exception, youtube_dl.utils.ExtractorError):
+            await ctx.send("Error: video unavailable")
+        else:
+            await ctx.send(exception)
 
     
     @commands.Cog.listener()
