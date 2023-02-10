@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from queue import Queue
+from time import time
 
 import discord
 from discord import Embed
@@ -12,13 +13,11 @@ import utils.general
 
 log = logging.getLogger(__name__)
 
-# TODO: add "now playing"
-# TODO:     add current place in track
 # TODO: add seekability
 # TODO: add guild independant queues
 # TODO: add playlist support
 # TODO: print error to chat when cant play song (comethazine)
-
+# TODO: add jump command to skip the queue
 
 
 class Music(commands.Cog, name='Music'):
@@ -34,7 +33,7 @@ class Music(commands.Cog, name='Music'):
     async def play(self, ctx, *, url, queuetop=False):
         """Streams from a url (doesn't predownload)"""
 
-        track = await YTDLSource.from_url(url, loop=self.bot.loop, stream=True)
+        track = await YTDLSource.from_url(url, loop=self.bot.loop, stream=True, user=ctx.author)
 
         if queuetop:
             queue_pos = self.songqueue.put_top(track)
@@ -54,14 +53,8 @@ class Music(commands.Cog, name='Music'):
             while not self.songqueue.empty():
                 track = self.songqueue.get()
                 ctx.voice_client.play(track, after=lambda e: print(f'Player error: {e}') if e else None)
-
-                msg = Embed(
-                    title = "Now playing:",
-                    description = track.title,
-                    url = track.url,
-                    color = utils.rng.random_color()
-                ).set_thumbnail(url=track.thumbnail)
-                await ctx.send(embed=msg)
+                await self.np(ctx)
+                track.start_time = time()
 
                 while ctx.voice_client.is_playing():
                     await asyncio.sleep(0.1)
@@ -70,7 +63,6 @@ class Music(commands.Cog, name='Music'):
     @commands.command()
     async def playnext(self, ctx, *, url):
         """Adds song to top of play queue"""
-
         await self.play(ctx, url=url, queuetop=True)
 
         #TODO accept queuenumber as argument to reorder queue
@@ -81,7 +73,7 @@ class Music(commands.Cog, name='Music'):
         if sq:= self.songqueue.show():
             tracklist = ""
             for idx,track in enumerate(sq):
-                tracklist += f"{idx+1} :  [{track.title}]({track.url})\n"
+                tracklist += f"{idx+1} :  [{track.title}]({track.url}) - {track.user.mention}\n"
             msg = Embed(
                 title = f"Queued tracks:",
                 description = tracklist,
@@ -98,7 +90,31 @@ class Music(commands.Cog, name='Music'):
     @commands.command()
     async def skip(self, ctx):
         ctx.voice_client.stop()
+        self.songqueue.clear()
         await utils.general.send_confirmation(ctx)
+
+
+    @commands.command()
+    async def np(self, ctx):
+        if ctx.voice_client.is_playing():
+            track = self.songqueue.inflight
+
+            desc = f"[{track.title}]({track.url})\n\n"
+            if track.user:
+                desc += f"Requested by: {track.user.mention}"
+            if track.start_time:
+                playtime = utils.general.sec_to_minsec(int(time() - track.start_time))
+                desc += f"\n{playtime} / {track.duration}"
+
+            msg = Embed(
+                title = f"Now Playing",
+                description = desc,
+                color = utils.rng.random_color()
+            ).set_thumbnail(url=track.thumbnail)
+
+            await ctx.send(embed=msg)
+        else:
+            await ctx.send("Nothing is playing")
 
 
     @commands.command()
@@ -115,6 +131,7 @@ class Music(commands.Cog, name='Music'):
     async def stop(self, ctx):
         """Stops and disconnects the bot from voice"""
         await ctx.voice_client.disconnect()
+        await utils.general.send_confirmation(ctx)
 
 
     @play.before_invoke
@@ -143,19 +160,22 @@ class Music(commands.Cog, name='Music'):
 
 
 class YTDLSource(discord.PCMVolumeTransformer):
-    def __init__(self, source, *, data, volume=0.5):
+    def __init__(self, source, *, data, volume=0.5, user=None):
         super().__init__(source, volume)
-
-        self.data = data
 
         self.title = data.get('title')
         self.streamurl = data.get('url')
         self.url = data.get('webpage_url')
         self.thumbnail = data.get('thumbnail')
 
+        self.duration = utils.general.sec_to_minsec(data.get('duration'))
+        self.start_time = None
+
+        self.user = user
+
 
     @classmethod
-    async def from_url(cls, url, *, loop=None, stream=False):
+    async def from_url(cls, url, *, loop=None, stream=False, user=None):
         loop = loop or asyncio.get_event_loop()
         data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
 
@@ -164,7 +184,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
             data = data['entries'][0]
 
         filename = data['url'] if stream else ytdl.prepare_filename(data)
-        return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
+        return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data, user=user)
 
 
 ytdl = youtube_dl.YoutubeDL({
@@ -190,11 +210,12 @@ ffmpeg_options = {
 class PseudoQueue:
     def __init__(self):
         self.list = []
+        self.inflight = None
 
     def get(self):
-        element = self.list[0]
+        self.inflight = self.list[0]
         del self.list[0]
-        return element
+        return self.inflight
 
     def put(self, item):
         self.list.append(item)
@@ -206,6 +227,7 @@ class PseudoQueue:
 
     def clear(self):
         self.list.clear()
+        self.inflight = None
 
     def show(self):
         return self.list.copy()
