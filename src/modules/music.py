@@ -3,6 +3,7 @@ import logging
 from queue import Queue
 
 import discord
+from discord import Embed
 from discord.ext import commands
 import youtube_dl
 
@@ -10,6 +11,15 @@ import utils.rng
 import utils.general
 
 log = logging.getLogger(__name__)
+
+# TODO: leave chat when everyone leaves
+# TODO: embed messages
+# TODO: add "now playing"
+# TODO:     add current place in track
+# TODO: add seekability
+# TODO: add guild independant queues
+# TODO: add playlist support
+# TODO: clear queue when disconnected
 
 
 
@@ -23,42 +33,74 @@ class Music(commands.Cog, name='Music'):
 
     ##### Commands #####
     @commands.command()
-    async def play(self, ctx, *, url):
+    async def play(self, ctx, *, url, queuetop=False):
         """Streams from a url (doesn't predownload)"""
 
         track = await YTDLSource.from_url(url, loop=self.bot.loop, stream=True)
-        self.songqueue.put(track)
-        if not ctx.voice_client.is_playing():
+
+        if queuetop:
+            queue_pos = self.songqueue.put_top(track)
+        else:
+            queue_pos = self.songqueue.put(track)
+
+        if ctx.voice_client.is_playing():
+            msg = Embed(
+                title = f"Track queued - Position {queue_pos}",
+                description = track.title,
+                url = track.url,
+                color = utils.rng.random_color()
+            ).set_image(url=track.thumbnail)
+            await ctx.send(embed=msg)
+
+        else:
             while not self.songqueue.empty():
                 track = self.songqueue.get()
-                await ctx.send(f'Now playing: {track.title}')
                 ctx.voice_client.play(track, after=lambda e: print(f'Player error: {e}') if e else None)
+
+                msg = Embed(
+                    title = "Now playing:",
+                    description = track.title,
+                    url = track.url,
+                    color = utils.rng.random_color()
+                ).set_thumbnail(url=track.thumbnail)
+                await ctx.send(embed=msg)
 
                 while ctx.voice_client.is_playing():
                     await asyncio.sleep(0.1)
-            await ctx.send("Queue is empty")
-        else:
-            await ctx.send(f'Queued track: {track.title}')
-        
+
+
+    @commands.command()
+    async def playnext(self, ctx, *, url):
+        """Adds song to top of play queue"""
+
+        await self.play(ctx, url=url, queuetop=True)
+
+        #TODO accept queuenumber as argument to reorder queue
+
 
     @commands.command()
     async def queue(self, ctx):
         if sq:= self.songqueue.show():
-            msg = ""
+            tracklist = ""
             for idx,element in enumerate(sq):
-                msg += f"{idx}: {element.title}\n"
+                tracklist += f"{idx+1}:  {element.title}\n"
+            msg = Embed(
+                title = f"Queued tracks:",
+                description = tracklist,
+                color = utils.rng.random_color()
+            )
         else:
-            msg = "Queue is empty"
-        await ctx.send(msg)
+            msg = Embed(
+                title = f"Queue is empty",
+                color = utils.rng.random_color()
+            )
+        await ctx.send(embed=msg)
 
 
     @commands.command()
     async def skip(self, ctx):
-        """stop"""
-
         ctx.voice_client.stop()
         await utils.general.send_confirmation(ctx)
-        # TODO: make operate on queue
 
 
     @commands.command()
@@ -85,21 +127,6 @@ class Music(commands.Cog, name='Music'):
             else:
                 await ctx.send("You are not connected to a voice channel.")
                 raise commands.CommandError("Author not connected to a voice channel.")
-        #elif ctx.voice_client.is_playing():
-        #    ctx.voice_client.stop()
-
-
-
-    ##### Model #####
-    async def stream_track(self, ctx):
-        while not self.songqueue.empty():
-            track = self.songqueue.get()
-            await ctx.send(f'Now playing: {track.title}')
-            ctx.voice_client.play(track, after=lambda e: print(f'Player error: {e}') if e else None)
-
-            while ctx.voice_client.is_playing():
-                await asyncio.sleep(0.1)
-        await ctx.send("Queue is empty")
 
 
 
@@ -110,7 +137,10 @@ class YTDLSource(discord.PCMVolumeTransformer):
         self.data = data
 
         self.title = data.get('title')
-        self.url = data.get('url')
+        self.streamurl = data.get('url')
+        self.url = data.get('webpage_url')
+        self.thumbnail = data.get('thumbnail')
+
 
     @classmethod
     async def from_url(cls, url, *, loop=None, stream=False):
@@ -156,6 +186,11 @@ class PseudoQueue:
 
     def put(self, item):
         self.list.append(item)
+        return len(self.list)
+
+    def put_top(self, item):
+        self.list.insert(0, item)
+        return 1
 
     def show(self):
         return self.list.copy()

@@ -109,4 +109,4 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
         elif isinstance(exception, commands.MissingRequiredArgument):
             await ctx.send("Error: command missing required argument")
         else:
-            await ctx.send(f"error: {exception}")
+            await ctx.send(f"Error: {exception}")
