@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "good_music_bot"
-version = "1.3.2"
+version = "1.4.2"
 description = "A discord music bot powered by discord.py"
 readme = "README.md"
 

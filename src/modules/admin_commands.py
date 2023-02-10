@@ -1,8 +1,10 @@
 import os
 import sys
+import logging
+
 import discord
 from discord.ext import commands
-import logging
+from discord import Embed
 
 import utils.general
 
@@ -29,25 +31,48 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
     # Leave server
     @commands.command()
     @commands.is_owner()
-    async def leave(self, ctx):
-        log.info(f"Recieved leave command in guild {ctx.guild.name}")
-        await utils.general.send_confirmation(ctx)
-        await ctx.guild.leave()
+    async def leave(self, ctx, guildid=None):
+        """Leave server"""
+        if not guildid:
+            log.info(f"Recieved leave command in guild {ctx.guild.name}")
+            await utils.general.send_confirmation(ctx)
+            await ctx.guild.leave()
+        else:
+            if guild := await self.bot.fetch_guild(guildid):
+                await utils.general.send_confirmation(ctx)
+                await guild.leave()
+            else:
+                await ctx.send(f"Cannot find guild '{guildid}'")
+
+
+    @commands.command()
+    @commands.is_owner()
+    async def servers(self, ctx):
+        """Prints all guilds bot is a member of"""
+        msg = ""
+        for guild in self.bot.guilds:
+            msg += f"{guild.name} - {guild.id} - owner: {guild.owner.mention}\n"
+        embed = Embed(
+            title = f"Guild membership:",
+            description = msg
+        )
+        await ctx.send(embed=embed)
 
 
     # Shutdown
     @commands.command()
     @commands.is_owner()
     async def die(self, ctx):
+        """Shutdown"""
         log.info("Received shutdown command")
         await utils.general.send_confirmation(ctx)
         await ctx.bot.close()
 
 
-    # Install Updates
     @commands.command()
     @commands.is_owner()
     async def update(self, ctx):
+        """Install updates from git"""
         global restart
         restart = True
 
@@ -74,10 +99,10 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
         await ctx.bot.close()
 
 
-    # Set status
     @commands.command()
     @commands.is_owner()
     async def status(self, ctx, action: utils.general.to_lower, status = None):
+        """Set Status"""
         if action == "clear":
             actiontype = discord.ActivityType.playing
             status = f"v{self.bot.version()}"
