@@ -17,7 +17,6 @@ log = logging.getLogger(__name__)
 # TODO: add seekability
 # TODO: add guild independant queues
 # TODO: add playlist support
-# TODO: clear queue when disconnected
 # TODO: print error to chat when cant play song (comethazine)
 
 
@@ -130,11 +129,14 @@ class Music(commands.Cog, name='Music'):
     
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-        """Disconnects bot from voice channel if no users are connected"""
+        """Disconnects bot from voice channel if no users are connected and clears queue if bot is disconnected"""
         if after.channel is None:
             if vc := member.guild.voice_client:
-                if not len(vc.channel.members) > 1:
+                if not vc.is_connected():
+                    self.songqueue.clear()
+                elif not len(vc.channel.members) > 1:
                     await vc.disconnect()
+                    self.songqueue.clear()
 
 
 
@@ -201,6 +203,9 @@ class PseudoQueue:
     def put_top(self, item):
         self.list.insert(0, item)
         return 1
+
+    def clear(self):
+        self.list.clear()
 
     def show(self):
         return self.list.copy()
