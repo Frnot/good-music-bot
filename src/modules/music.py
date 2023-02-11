@@ -16,7 +16,6 @@ log = logging.getLogger(__name__)
 # TODO: add seekability
 # TODO: add guild independant queues
 # TODO: add playlist support
-# TODO: add jump command to skip the queue
 
 
 class Music(commands.Cog, name='Music'):
@@ -181,8 +180,6 @@ class Music(commands.Cog, name='Music'):
 
 
 
-
-
 class YTDLSource(discord.PCMVolumeTransformer):
     def __init__(self, source, *, data, volume=0.5, user=None):
         super().__init__(source, volume)
@@ -192,7 +189,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
         self.url = data.get('webpage_url')
         self.thumbnail = data.get('thumbnail')
 
-        self.duration = utils.general.sec_to_minsec(data.get('duration'))
+        self.duration = utils.general.sec_to_minsec(int(data.get('duration')))
         self.start_time = None
 
         self.user = user
