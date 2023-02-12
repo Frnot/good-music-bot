@@ -26,7 +26,7 @@ class Music(commands.Cog, name='Music'):
         self.songqueue = PseudoQueue()
 
         # Start Lavalink
-        subprocess.Popen(["java", "-jar", "Lavalink.jar"], cwd="Lavalink")
+        subprocess.Popen(["java", "-jar", "Lavalink.jar"], cwd="../Lavalink")
         # Connect to Lavalink
         bot.loop.create_task(self.connect_nodes())
 
