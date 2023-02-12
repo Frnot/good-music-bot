@@ -1,12 +1,13 @@
 import asyncio
 import logging
-from queue import Queue
+import os
+import subprocess
 from time import time
 
 import discord
 from discord import Embed
 from discord.ext import commands
-import youtube_dl
+import wavelink
 
 import utils.rng
 import utils.general
@@ -16,22 +17,54 @@ log = logging.getLogger(__name__)
 # TODO: add seekability
 # TODO: add guild independant queues
 # TODO: add playlist support
+# TODO: add remove command to clear certain elements from queue
 
 
 class Music(commands.Cog, name='Music'):
     def __init__(self, bot):
         self.bot = bot
         self.songqueue = PseudoQueue()
+
+        # Start Lavalink
+        subprocess.Popen(["java", "-jar", "Lavalink.jar"], cwd="Lavalink")
+        # Connect to Lavalink
+        bot.loop.create_task(self.connect_nodes())
+
         log.info(f"Registered Cog: {self.qualified_name}")
+
+
+    async def connect_nodes(self):
+        """Connect to our Lavalink nodes."""
+        await self.bot.wait_until_ready()
+        await wavelink.NodePool.create_node(
+            bot = self.bot,
+            host = "localhost",
+            port = 2333,
+            password = os.getenv("Lavalink_Password") )
+
+
+    @commands.Cog.listener()
+    async def on_wavelink_node_ready(self, node: wavelink.Node):
+        """Event fired when a node has finished connecting."""
+        log.info(f'Lavalink Node: <{node.identifier}> is ready!')
 
 
 
     ##### Commands #####
     @commands.command()
-    async def play(self, ctx, *, url, queuetop=False):
+    async def play(self, ctx, *, query, queuetop=False):
         """Streams from a url (doesn't predownload)"""
 
-        track = await YTDLSource.from_url(url, loop=self.bot.loop, stream=True, user=ctx.author)
+        vc: wavelink.Player = ctx.voice_client
+
+        # TODO: better regex for url matching
+        if "http" in query:
+            track = (await vc.node.get_tracks(query=query, cls=wavelink.Track))[0]
+        else:
+            track = await wavelink.YouTubeTrack.search(query=query, return_first=True)
+
+        track.requester = ctx.author
+
 
         if queuetop:
             queue_pos = self.songqueue.put_top(track)
@@ -42,7 +75,7 @@ class Music(commands.Cog, name='Music'):
             msg = Embed(
                 title = f"Track queued - Position {queue_pos}",
                 description = track.title,
-                url = track.url,
+                url = track.uri,
                 color = utils.rng.random_color()
             ).set_image(url=track.thumbnail)
             await ctx.send(embed=msg)
@@ -51,11 +84,10 @@ class Music(commands.Cog, name='Music'):
             while not self.songqueue.empty():
                 track = self.songqueue.get()
                 try:
-                    ctx.voice_client.play(track, after=lambda e: print(f'Player error: {e}') if e else None)
+                    await vc.play(track)
                 except Exception as e:
                     log.info(f"Encountered error:{e}")
                 await self.np(ctx)
-                track.start_time = time()
 
                 while ctx.voice_client.is_playing():
                     await asyncio.sleep(0.1)
@@ -70,11 +102,35 @@ class Music(commands.Cog, name='Music'):
 
 
     @commands.command()
+    async def np(self, ctx):
+        if ctx.voice_client.is_playing():
+            track = ctx.voice_client.source
+
+            desc = f"[{track.title}]({track.uri})\n\n"
+            if track.requester:
+                desc += f"Requested by: {track.requester.mention}"
+            if (position := ctx.voice_client.position) != track.duration:
+                desc += f"\n{utils.general.sec_to_minsec(int(position))} / {utils.general.sec_to_minsec(int(track.duration))}"
+
+            msg = Embed(
+                title = f"Now Playing",
+                description = desc,
+                color = utils.rng.random_color()
+            )
+            if hasattr(track, "thumbnail"):
+                msg.set_thumbnail(url=track.thumbnail)
+
+            await ctx.send(embed=msg)
+        else:
+            await ctx.send("Nothing is playing")
+
+
+    @commands.command()
     async def queue(self, ctx):
         if sq:= self.songqueue.show():
             tracklist = ""
             for idx,track in enumerate(sq):
-                tracklist += f"{idx+1} :  [{track.title}]({track.url}) - {track.user.mention}\n"
+                tracklist += f"{idx+1} :  [{track.title}]({track.uri}) - {track.requester.mention}\n"
             msg = Embed(
                 title = f"Queued tracks:",
                 description = tracklist,
@@ -91,12 +147,12 @@ class Music(commands.Cog, name='Music'):
     @commands.command()
     async def skip(self, ctx, num = None):
         if not num:
-            ctx.voice_client.stop()
+            await ctx.voice_client.stop()
             await utils.general.send_confirmation(ctx)
         else:
             try:
                 self.songqueue.pop(int(num)-1)
-                ctx.voice_client.stop()
+                await ctx.voice_client.stop()
                 await utils.general.send_confirmation(ctx)
             except:
                 await ctx.send("Error: please enter a valid index number")
@@ -106,39 +162,6 @@ class Music(commands.Cog, name='Music'):
     async def clear(self, ctx):
         self.songqueue.clear()
         await utils.general.send_confirmation(ctx)
-
-
-    @commands.command()
-    async def np(self, ctx):
-        if ctx.voice_client.is_playing():
-            track = self.songqueue.inflight
-
-            desc = f"[{track.title}]({track.url})\n\n"
-            if track.user:
-                desc += f"Requested by: {track.user.mention}"
-            if track.start_time:
-                playtime = utils.general.sec_to_minsec(int(time() - track.start_time))
-                desc += f"\n{playtime} / {track.duration}"
-
-            msg = Embed(
-                title = f"Now Playing",
-                description = desc,
-                color = utils.rng.random_color()
-            ).set_thumbnail(url=track.thumbnail)
-
-            await ctx.send(embed=msg)
-        else:
-            await ctx.send("Nothing is playing")
-
-
-    @commands.command()
-    async def volume(self, ctx, volume: int):
-        """Changes the player's volume"""
-        if ctx.voice_client is None:
-            return await ctx.send("Not connected to a voice channel.")
-
-        ctx.voice_client.source.volume = volume / 100
-        await ctx.send(f"Changed volume to {volume}%")
 
 
     @commands.command()
@@ -153,18 +176,21 @@ class Music(commands.Cog, name='Music'):
     async def ensure_voice(self, ctx):
         if ctx.voice_client is None:
             if ctx.author.voice:
-                await ctx.author.voice.channel.connect()
+                await ctx.author.voice.channel.connect(cls=wavelink.Player)
             else:
                 await ctx.send("You are not connected to a voice channel.")
                 raise commands.CommandError("Author not connected to a voice channel.")
 
+
     
     @play.error
     async def error(self, ctx, exception):
-        if isinstance(exception, youtube_dl.utils.DownloadError) or isinstance(exception, youtube_dl.utils.ExtractorError):
-            await ctx.send("Error: video unavailable")
-        else:
-            await ctx.send(exception)
+        #if isinstance(exception, youtube_dl.utils.DownloadError) or isinstance(exception, youtube_dl.utils.ExtractorError):
+        #    await ctx.send("Error: video unavailable")
+        #else:
+        await ctx.send(exception)
+    
+
 
     
     @commands.Cog.listener()
@@ -178,54 +204,6 @@ class Music(commands.Cog, name='Music'):
                     await vc.disconnect()
                     self.songqueue.clear()
 
-
-
-class YTDLSource(discord.PCMVolumeTransformer):
-    def __init__(self, source, *, data, volume=0.5, user=None):
-        super().__init__(source, volume)
-
-        self.title = data.get('title')
-        self.streamurl = data.get('url')
-        self.url = data.get('webpage_url')
-        self.thumbnail = data.get('thumbnail')
-
-        self.duration = utils.general.sec_to_minsec(int(data.get('duration')))
-        self.start_time = None
-
-        self.user = user
-
-
-    @classmethod
-    async def from_url(cls, url, *, loop=None, stream=False, user=None):
-        loop = loop or asyncio.get_event_loop()
-        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
-
-        if 'entries' in data:
-            # take first item from a playlist
-            data = data['entries'][0]
-
-        filename = data['url'] if stream else ytdl.prepare_filename(data)
-        return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data, user=user)
-
-
-ytdl = youtube_dl.YoutubeDL({
-    'format': 'bestaudio/best',
-    'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
-    'restrictfilenames': True,
-    'noplaylist': True,
-    'nocheckcertificate': True,
-    'ignoreerrors': False,
-    'logtostderr': False,
-    'quiet': True,
-    'no_warnings': True,
-    'default_search': 'auto',
-    'source_address': '0.0.0.0',  # bind to ipv4 since ipv6 addresses cause issues sometimes
-})
-
-
-ffmpeg_options = {
-    'options': '-vn',
-}
 
 
 class PseudoQueue:

@@ -6,3 +6,5 @@ build
 .vscode
 *.exe
 *.webm
+*.egg-info
+*.gz

@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "good_music_bot"
-version = "1.5.1"
-description = "A discord music bot powered by discord.py"
+version = "2.0.0"
+description = "A discord music bot powered by discord.py and Wavelink"
 readme = "README.md"
 
 requires-python = ">=3.8"
 dependencies = [
-    "discord.py[voice]",
+    "discord.py",
     "python-dotenv",
-    "youtube_dl",
+    "Wavelink",
 ]
