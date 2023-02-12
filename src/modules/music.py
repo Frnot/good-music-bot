@@ -38,7 +38,7 @@ class Music(commands.Cog, name='Music'):
         """Connect to our Lavalink nodes."""
         await self.bot.wait_until_ready()
 
-        log.info("Attempting to connect to Lavalink Server")
+        log.debug("Attempting to connect to Lavalink Server")
         connection_attempt = 1
         while connection_attempt < 5:
             result = await wavelink.NodePool.create_node(
@@ -49,7 +49,7 @@ class Music(commands.Cog, name='Music'):
 
             if result.is_connected():
                 break
-            log.info("connection failed. reattempting...")
+            log.debug("connection failed. reattempting...")
             await asyncio.sleep(0.5)
             connection_attempt += 1
         else:
@@ -111,8 +111,6 @@ class Music(commands.Cog, name='Music'):
         """Adds song to top of play queue"""
         await self.play(ctx, url=url, queuetop=True)
 
-        #TODO accept queuenumber as argument to reorder queue
-
 
     @commands.command()
     async def np(self, ctx):
@@ -122,8 +120,9 @@ class Music(commands.Cog, name='Music'):
             desc = f"[{track.title}]({track.uri})\n\n"
             if track.requester:
                 desc += f"Requested by: {track.requester.mention}"
-            if (position := ctx.voice_client.position) != track.duration:
-                desc += f"\n{utils.general.sec_to_minsec(int(position))} / {utils.general.sec_to_minsec(int(track.duration))}"
+            if (position := ctx.voice_client.position) == track.duration:
+                position = 0
+            desc += f"\n{utils.general.sec_to_minsec(int(position))} / {utils.general.sec_to_minsec(int(track.duration))}"
 
             msg = Embed(
                 title = f"Now Playing",
@@ -185,6 +184,22 @@ class Music(commands.Cog, name='Music'):
     async def clear(self, ctx):
         self.songqueue.clear()
         await utils.general.send_confirmation(ctx)
+
+
+    @commands.command()
+    async def seek(self, ctx, time):
+        try:
+            seconds = utils.general.timestr_to_secs(time)
+            seektime = seconds*1000
+
+            if seconds > ctx.voice_client.source.duration:
+                raise ValueError
+
+            log.debug(f"seeking to {seconds} seconds")
+            await ctx.voice_client.seek(seektime)
+            await utils.general.send_confirmation(ctx)
+        except:
+            await ctx.send("Error: invalid timestamp")
 
 
     @commands.command()
