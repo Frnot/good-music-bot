@@ -15,4 +15,4 @@ tmux_command() {
 tmux new -d -s $SESSION_NAME
 
 tmux_command cd /bot
-tmux_command python3 src/main.py -q
+tmux_command python3 src/main.py

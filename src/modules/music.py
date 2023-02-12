@@ -26,6 +26,7 @@ class Music(commands.Cog, name='Music'):
         self.songqueue = PseudoQueue()
 
         # Start Lavalink
+        log.info("Starting Lavalink Server")
         subprocess.Popen(["java", "-jar", "Lavalink.jar"], cwd="Lavalink")
         # Connect to Lavalink
         bot.loop.create_task(self.connect_nodes())
@@ -36,13 +37,23 @@ class Music(commands.Cog, name='Music'):
     async def connect_nodes(self):
         """Connect to our Lavalink nodes."""
         await self.bot.wait_until_ready()
-        # TODO add loop to retry here
-        await asyncio.sleep(3)
-        await wavelink.NodePool.create_node(
-            bot = self.bot,
-            host = "localhost",
-            port = 2333,
-            password = os.getenv("Lavalink_Password") )
+
+        log.info("Attempting to connect to Lavalink Server")
+        connection_attempt = 1
+        while connection_attempt < 5:
+            result = await wavelink.NodePool.create_node(
+                bot = self.bot,
+                host = "localhost",
+                port = 2333,
+                password = os.getenv("Lavalink_Password") )
+
+            if result.is_connected():
+                break
+            log.info("connection failed. reattempting...")
+            await asyncio.sleep(0.5)
+            connection_attempt += 1
+        else:
+            log.error("Failed to connect to Lavalink server")
 
 
     @commands.Cog.listener()
