@@ -102,8 +102,11 @@ class Music(commands.Cog, name='Music'):
                     log.info(f"Encountered error:{e}")
                 await self.np(ctx)
 
-                while ctx.voice_client.is_playing():
-                    await asyncio.sleep(0.1)
+                try:
+                    while ctx.voice_client.is_playing():
+                        await asyncio.sleep(0.1)
+                except AttributeError: # voice client annihilation when forcefully disconnected
+                    pass
 
 
     @commands.command()
@@ -217,7 +220,6 @@ class Music(commands.Cog, name='Music'):
                 await ctx.author.voice.channel.connect(cls=wavelink.Player)
             else:
                 await ctx.send("You are not connected to a voice channel.")
-                raise commands.CommandError("Author not connected to a voice channel.")
 
 
     
