@@ -17,7 +17,6 @@ log = logging.getLogger(__name__)
 # TODO: add seekability
 # TODO: add guild independant queues
 # TODO: add playlist support
-# TODO: add remove command to clear certain elements from queue
 
 
 class Music(commands.Cog, name='Music'):
@@ -27,6 +26,7 @@ class Music(commands.Cog, name='Music'):
 
         # Start Lavalink
         log.info("Starting Lavalink Server")
+        #TODO: (noncritical) dont try to reopen on update
         subprocess.Popen(["java", "-jar", "Lavalink.jar"], cwd="Lavalink")
         # Connect to Lavalink
         bot.loop.create_task(self.connect_nodes())
@@ -95,7 +95,7 @@ class Music(commands.Cog, name='Music'):
 
         else:
             while not self.songqueue.empty():
-                track = self.songqueue.get()
+                track = self.songqueue.pop()
                 try:
                     await vc.play(track)
                 except Exception as e:
@@ -172,6 +172,16 @@ class Music(commands.Cog, name='Music'):
 
 
     @commands.command()
+    async def remove(self, ctx, idx):
+        try:
+            self.songqueue.remove(idx)
+            await utils.general.send_confirmation(ctx)
+        except (IndexError, TypeError) as e:
+            await ctx.send(e)
+            await ctx.send("Enter a valid index")
+
+
+    @commands.command()
     async def clear(self, ctx):
         self.songqueue.clear()
         await utils.general.send_confirmation(ctx)
@@ -222,18 +232,18 @@ class Music(commands.Cog, name='Music'):
 class PseudoQueue:
     def __init__(self):
         self.list = []
-        self.inflight = None
 
-    def get(self):
-        self.inflight = self.list[0]
-        del self.list[0]
-        return self.inflight
-
-    def pop(self, n):
-        if not n < len(self.list):
-            raise IndexError
-        self.list = self.list[n:]
-            
+    def pop(self, n=None):
+        if n:
+            if not n < len(self.list):
+                raise IndexError
+            element = self.list[n]
+            self.list = self.list[n:]
+            return element
+        else:
+            element = self.list[0]
+            del self.list[0]
+            return element
 
     def put(self, item):
         self.list.append(item)
@@ -245,7 +255,9 @@ class PseudoQueue:
 
     def clear(self):
         self.list.clear()
-        self.inflight = None
+
+    def remove(self, idx):
+        del self.list[int(idx)-1]
 
     def show(self):
         return self.list.copy()
