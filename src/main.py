@@ -1,11 +1,13 @@
 import asyncio
+import logging
 import os
 import sys
+
 from dotenv import load_dotenv
-from utils import logger
-import logging
+
 import bot_main
 from modules import admin_commands
+from utils import logger
 
 debug = True
 quiet = False

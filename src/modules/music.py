@@ -5,16 +5,15 @@ import subprocess
 from time import time
 
 import discord
+import wavelink
 from discord import Embed
 from discord.ext import commands
-import wavelink
 
-import utils.rng
 import utils.general
+import utils.rng
 
 log = logging.getLogger(__name__)
 
-# TODO: add seekability
 # TODO: add guild independant queues
 # TODO: add playlist support
 
@@ -76,8 +75,8 @@ class Music(commands.Cog, name='Music'):
         else:
             track = await wavelink.YouTubeTrack.search(query=query, return_first=True)
 
+        # this is smelly
         track.requester = ctx.author
-
 
         if queuetop:
             queue_pos = self.songqueue.put_top(track)

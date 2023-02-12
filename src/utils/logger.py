@@ -1,8 +1,7 @@
 import logging
-from logging.handlers import QueueHandler, QueueListener
 import os
 import queue
-
+from logging.handlers import QueueHandler, QueueListener
 
 
 def init(debug, quiet):
