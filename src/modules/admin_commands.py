@@ -123,7 +123,9 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
         await utils.general.send_confirmation(ctx)
 
 
+    @invite.error
     @leave.error
+    @servers.error
     @die.error
     @update.error
     @status.error
@@ -134,4 +136,17 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
         elif isinstance(exception, commands.MissingRequiredArgument):
             await ctx.send("Error: command missing required argument")
         else:
-            await ctx.send(f"Error: {exception}")
+            await ctx.send(exception)
+
+
+banned_ids = [
+    256620040831369216, #ronald
+]
+
+async def has_permission(ctx):
+    if ctx.author.id in banned_ids:
+        raise UserIsBanned(f"{ctx.author.mention} eat shit!")
+    return True
+
+class UserIsBanned(commands.CheckFailure):
+    pass

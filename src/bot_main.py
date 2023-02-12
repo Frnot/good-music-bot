@@ -1,17 +1,18 @@
-import sys
 import logging
+import sys
+
 import discord
 from discord.ext import commands as dcommands
 from dotenv import load_dotenv
+
 if sys.version_info >= (3, 8):
     from importlib import metadata
 else:
     import importlib_metadata as metadata
 
 # Import modules
-from modules.admin_commands import AdminCommands
+from modules.admin_commands import AdminCommands, has_permission
 from modules.music import Music
-
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +44,10 @@ class Bot(dcommands.Bot):
         # Load modules
         await bot.add_cog(AdminCommands(bot))
         await bot.add_cog(Music(bot))
+        # Load permission checker
+        bot.add_check(has_permission)
 
     def version(self):
         return version
+
+
