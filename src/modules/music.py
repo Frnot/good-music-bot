@@ -112,9 +112,9 @@ class Music(commands.Cog, name='Music'):
 
 
     @commands.command()
-    async def playnext(self, ctx, *, url):
+    async def playnext(self, ctx, *, query):
         """Adds song to top of play queue"""
-        await self.play(ctx, url=url, queuetop=True)
+        await self.play(ctx, query=query, queuetop=True)
 
 
     @commands.command()
