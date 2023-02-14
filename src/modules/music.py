@@ -89,7 +89,10 @@ class Music(commands.Cog, name='Music'):
                 description = track.title,
                 url = track.uri,
                 color = utils.rng.random_color()
-            ).set_image(url=track.thumbnail)
+            )
+            if hasattr(track, "thumbnail"):
+                msg.set_image(url=track.thumbnail)
+
             await ctx.send(embed=msg)
 
         else:
