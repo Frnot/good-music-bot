@@ -212,6 +212,12 @@ class Music(commands.Cog, name='Music'):
 
 
     @commands.command()
+    async def restart(self, ctx):
+        """seeks to beginning of song"""
+        await self.seek(ctx, "0")
+
+
+    @commands.command()
     async def stop(self, ctx):
         """Stops and disconnects the bot from voice"""
         await ctx.voice_client.disconnect()
