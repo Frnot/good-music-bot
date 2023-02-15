@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import subprocess
+import typing
 from time import time
 
 import discord
@@ -64,38 +65,40 @@ class Music(commands.Cog, name='Music'):
 
     ##### Commands #####
     @commands.command()
-    async def play(self, ctx, *, query, queuetop=False):
+    async def play(self, ctx, *, request: typing.Union[wavelink.YouTubeTrack, wavelink.YouTubePlaylist, wavelink.SoundCloudTrack], queuetop=False):
         """Streams from a url (doesn't predownload)"""
 
         vc: wavelink.Player = ctx.voice_client
+        queue: function = self.songqueue.put_top if queuetop else self.songqueue.put
 
-        # TODO: better regex for url matching
-        if "http" in query:
-            track = (await vc.node.get_tracks(query=query, cls=wavelink.Track))[0]
-        else:
-            track = await wavelink.YouTubeTrack.search(query=query, return_first=True)
+        if isinstance(request, wavelink.YouTubePlaylist):
+            for track in request.tracks:
+                track.requester = ctx.author 
+            queue(request.tracks)
 
-        # this is smelly
-        track.requester = ctx.author
-
-        if queuetop:
-            queue_pos = self.songqueue.put_top(track)
-        else:
-            queue_pos = self.songqueue.put(track)
-
-        if ctx.voice_client.is_playing():
             msg = Embed(
-                title = f"Track queued - Position {queue_pos}",
-                description = track.title,
-                url = track.uri,
+                title = f"Queued playlist",
+                description = request.name,
                 color = utils.rng.random_color()
             )
-            if hasattr(track, "thumbnail"):
-                msg.set_image(url=track.thumbnail)
-
             await ctx.send(embed=msg)
-
         else:
+            request.requester = ctx.author
+            queue_pos = queue(request)
+
+            if ctx.voice_client.is_playing():
+                msg = Embed(
+                    title = f"Track queued - Position {queue_pos}",
+                    description = request.title,
+                    url = request.uri,
+                    color = utils.rng.random_color()
+                )
+                if hasattr(request, "thumbnail"):
+                    msg.set_image(url=request.thumbnail)
+                await ctx.send(embed=msg)
+
+        # If bot isn't playing, process queue
+        if not ctx.voice_client.is_playing():
             while not self.songqueue.empty():
                 track = self.songqueue.pop()
                 try:
@@ -112,9 +115,9 @@ class Music(commands.Cog, name='Music'):
 
 
     @commands.command()
-    async def playnext(self, ctx, *, query):
+    async def playnext(self, ctx, *, request: typing.Union[wavelink.YouTubeTrack, wavelink.YouTubePlaylist, wavelink.SoundCloudTrack]):
         """Adds song to top of play queue"""
-        await self.play(ctx, query=query, queuetop=True)
+        await self.play(ctx, request=request, queuetop=True)
 
 
     @commands.command()
@@ -126,8 +129,9 @@ class Music(commands.Cog, name='Music'):
             if track.requester:
                 desc += f"Requested by: {track.requester.mention}"
             if (position := ctx.voice_client.position) == track.duration:
-                position = 0
-            desc += f"\n{utils.general.sec_to_minsec(int(position))} / {utils.general.sec_to_minsec(int(track.duration))}"
+                desc += f"\nLength: {utils.general.sec_to_minsec(int(track.duration))}"
+            else:
+                desc += f"\n{utils.general.sec_to_minsec(int(position))} / {utils.general.sec_to_minsec(int(track.duration))}"
 
             msg = Embed(
                 title = f"Now Playing",
@@ -216,6 +220,7 @@ class Music(commands.Cog, name='Music'):
 
 
     @play.before_invoke
+    @playnext.before_invoke
     async def ensure_voice(self, ctx):
         if ctx.voice_client is None:
             if ctx.author.voice:
@@ -231,7 +236,6 @@ class Music(commands.Cog, name='Music'):
         #    await ctx.send("Error: video unavailable")
         #else:
         await ctx.send(exception)
-    
 
 
     
@@ -264,12 +268,19 @@ class PseudoQueue:
             del self.list[0]
             return element
 
-    def put(self, item):
-        self.list.append(item)
+    def put(self, item) -> int:
+        try:
+            self.list.extend(item)
+        except:
+            self.list.append(item)
         return len(self.list)
 
-    def put_top(self, item):
-        self.list.insert(0, item)
+    def put_top(self, item) -> int:
+        try:
+            item.extend(self.list)
+            self.list = item
+        except:
+            self.list.insert(0, item)
         return 1
 
     def clear(self):
