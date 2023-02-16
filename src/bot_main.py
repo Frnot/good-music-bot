@@ -45,7 +45,7 @@ class Bot(dcommands.Bot):
     async def setup_hook(self):
         # Load Database
         log.info("Loading database")
-        await db.loadasync()
+        await db.load()
 
         # Load modules
         await bot.add_cog(AdminCommands(bot))

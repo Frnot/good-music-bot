@@ -16,12 +16,7 @@ init_tables = {
 
 
 ### "Constructor"
-def load():
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(loadasync())
-
-
-async def loadasync():
+async def load():
     global conn
 
     log.info("Initializing database")
