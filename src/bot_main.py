@@ -11,8 +11,10 @@ else:
     import importlib_metadata as metadata
 
 # Import modules
-from modules.admin_commands import AdminCommands, has_permission
+from utils import db
+from modules.admin_commands import AdminCommands
 from modules.music import Music
+from modules.permissions import Permissions
 
 log = logging.getLogger(__name__)
 
@@ -23,9 +25,6 @@ version = metadata.version('good_music_bot')
 def run_bot(bot_token):
     log.info(f"Running version v{version}")
 
-    #intents = discord.Intents.default()
-    #intents.message_content = True
-
     # Create bot
     global bot
     bot = Bot(command_prefix=dcommands.when_mentioned_or("."), intents=discord.Intents.all(),
@@ -34,6 +33,9 @@ def run_bot(bot_token):
     # Run bot
     bot.run(bot_token)
 
+    # Cleanup
+    db.close()
+
 
 
 class Bot(dcommands.Bot):
@@ -41,13 +43,16 @@ class Bot(dcommands.Bot):
         log.info(f"Logged on as {bot.user}!\nReady.")
 
     async def setup_hook(self):
+        # Load Database
+        log.info("Loading database")
+        await db.loadasync()
+
         # Load modules
         await bot.add_cog(AdminCommands(bot))
         await bot.add_cog(Music(bot))
+        await bot.add_cog(Permissions(bot))
         # Load permission checker
-        bot.add_check(has_permission)
+        bot.add_check(bot.get_cog('Permissions').has_permission)
 
     def version(self):
         return version
-
-

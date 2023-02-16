@@ -137,16 +137,3 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
             await ctx.send("Error: command missing required argument")
         else:
             await ctx.send(exception)
-
-
-banned_ids = [
-    256620040831369216, #ronald
-]
-
-async def has_permission(ctx):
-    if ctx.author.id in banned_ids:
-        raise UserIsBanned(f"{ctx.author.mention} eat shit!")
-    return True
-
-class UserIsBanned(commands.CheckFailure):
-    pass
