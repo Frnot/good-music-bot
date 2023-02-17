@@ -28,30 +28,31 @@ load_dotenv()
 token = os.getenv("TOKEN")   
 
 
-# Run the Bot
-log.info("Starting bot")
-bot_main.run_bot(token)
+try:
+    # Run the Bot
+    log.info("Starting bot")
+    bot_main.run_bot(token)
 
+finally:
+    # Stop loggin queue listener and flush queue
+    logger.stop()
 
-# Stop loggin queue listener and flush queue
-logger.stop()
+    # If shutting down because of restart, execute main with the same arguments
+    if admin_commands.restart:
+        print("Restarting code")
 
-# If shutting down because of restart, execute main with the same arguments
-if admin_commands.restart:
-    print("Restarting code")
+        if sys.platform.startswith('linux'):
+            argv = [sys.executable, __file__] + sys.argv[1:]
+        else:
+            argv = [f"\"{sys.executable}\"", f"\"{__file__}\""] + sys.argv[1:]
 
-    if sys.platform.startswith('linux'):
-        argv = [sys.executable, __file__] + sys.argv[1:]
-    else:
-        argv = [f"\"{sys.executable}\"", f"\"{__file__}\""] + sys.argv[1:]
-
-    try:
-        print(f"Running command: 'os.execv({sys.executable}, {argv})'")
-        os.execv(sys.executable, argv)
-    except Exception as e:
-        print(e)
-        logger.start()
-        log.error(f"Command: 'os.execv({sys.executable}, {argv})' failed.")
-        log.error(e)
-        log.fatal("Cannot restart. exiting.")
-        logger.stop()
+        try:
+            print(f"Running command: 'os.execv({sys.executable}, {argv})'")
+            os.execv(sys.executable, argv)
+        except Exception as e:
+            print(e)
+            logger.start()
+            log.error(f"Command: 'os.execv({sys.executable}, {argv})' failed.")
+            log.error(e)
+            log.fatal("Cannot restart. exiting.")
+            logger.stop()
