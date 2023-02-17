@@ -248,14 +248,13 @@ class Music(commands.Cog, name='Music'):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
         """Disconnects bot from voice channel if no users are connected and clears queue if bot is disconnected"""
-        if after.channel is None:
-            if member == self.bot.user:
-                log.debug(f"Was forceflly disconnected from channel {after.channel}")
+        if after.channel is None: # User disconnected
+            if member == self.bot.user: # Bot disconnected
                 self.songqueue.clear()
-            elif vc := member.guild.voice_client and not len(vc.channel.members) > 1:
-                log.debug(f"All users in channel {vc.channel} have disconnected. Bot will isconnecting.")
-                await vc.disconnect()
-                self.songqueue.clear()
+            elif vc := member.guild.voice_client:
+                if not (len(vc.channel.members) > 1): # Bot is the only user connected to the vc
+                    await vc.disconnect()
+                    
 
 
 
