@@ -30,8 +30,9 @@ async def load():
 
 
 def close():
-    with asyncio.new_event_loop() as loop:
-        loop.run_until_complete(conn.close())
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(conn.close())
+    loop.stop()
     log.info("Closed database connection.")
 
 
