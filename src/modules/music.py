@@ -15,14 +15,10 @@ import utils.rng
 
 log = logging.getLogger(__name__)
 
-# TODO: add guild independant queues
-# TODO: add playlist support
-
 
 class Music(commands.Cog, name='Music'):
     def __init__(self, bot):
         self.bot = bot
-        self.songqueue = PseudoQueue()
 
         # Start Lavalink
         log.info("Starting Lavalink Server")
@@ -69,12 +65,12 @@ class Music(commands.Cog, name='Music'):
         """Streams from a url (doesn't predownload)"""
 
         vc: wavelink.Player = ctx.voice_client
-        queue: function = self.songqueue.put_top if queuetop else self.songqueue.put
+        queuetrack: function = vc.queue.put_top if queuetop else vc.queue.put
 
         if isinstance(request, wavelink.YouTubePlaylist):
             for track in request.tracks:
                 track.requester = ctx.author 
-            queue(request.tracks)
+            queuetrack(request.tracks)
 
             msg = Embed(
                 title = f"Queued playlist",
@@ -84,7 +80,7 @@ class Music(commands.Cog, name='Music'):
             await ctx.send(embed=msg)
         else:
             request.requester = ctx.author
-            queue_pos = queue(request)
+            queue_pos = queuetrack(request)
 
             if ctx.voice_client.is_playing():
                 msg = Embed(
@@ -99,19 +95,21 @@ class Music(commands.Cog, name='Music'):
 
         # If bot isn't playing, process queue
         if not ctx.voice_client.is_playing():
-            while not self.songqueue.empty():
-                track = self.songqueue.pop()
-                try:
-                    await vc.play(track)
-                except Exception as e:
-                    log.info(f"Encountered error:{e}")
-                await self.np(ctx)
+            try:
+                while not vc.queue.empty():
+                    track = vc.queue.pop()
+                    try:
+                        await vc.play(track)
+                    except Exception as e:
+                        log.info(f"Encountered error:{e}")
+                        continue
+                    await self.np(ctx)
 
-                try:
                     while ctx.voice_client.is_playing():
                         await asyncio.sleep(0.1)
-                except AttributeError: # voice client annihilation when forcefully disconnected
-                    pass
+            except AttributeError: # voice_client annihilation when disconnected
+                pass
+                    
 
 
     @commands.command()
@@ -148,7 +146,7 @@ class Music(commands.Cog, name='Music'):
 
     @commands.command()
     async def queue(self, ctx):
-        if sq:= self.songqueue.show():
+        if sq:= ctx.voice_client.queue.show():
             tracklist = ""
             for idx,track in enumerate(sq):
                 tracklist += f"{idx+1} :  [{track.title}]({track.uri}) - {track.requester.mention}\n"
@@ -172,7 +170,7 @@ class Music(commands.Cog, name='Music'):
             await utils.general.send_confirmation(ctx)
         else:
             try:
-                self.songqueue.pop(int(num)-1)
+                ctx.voice_client.queue.pop(int(num)-1)
                 await ctx.voice_client.stop()
                 await utils.general.send_confirmation(ctx)
             except:
@@ -182,7 +180,7 @@ class Music(commands.Cog, name='Music'):
     @commands.command()
     async def remove(self, ctx, idx):
         try:
-            self.songqueue.remove(idx)
+            ctx.voice_client.queue.remove(idx)
             await utils.general.send_confirmation(ctx)
         except (IndexError, TypeError) as e:
             await ctx.send(e)
@@ -191,7 +189,7 @@ class Music(commands.Cog, name='Music'):
 
     @commands.command()
     async def clear(self, ctx):
-        self.songqueue.clear()
+        ctx.voice_client.queue.clear()
         await utils.general.send_confirmation(ctx)
 
 
@@ -207,7 +205,7 @@ class Music(commands.Cog, name='Music'):
             log.debug(f"seeking to {seconds} seconds")
             await ctx.voice_client.seek(seektime)
             await utils.general.send_confirmation(ctx)
-        except:
+        except ValueError:
             await ctx.send("Error: invalid timestamp")
 
 
@@ -221,7 +219,6 @@ class Music(commands.Cog, name='Music'):
     async def stop(self, ctx):
         """Stops and disconnects the bot from voice"""
         await ctx.voice_client.disconnect()
-        self.songqueue.clear()
         await utils.general.send_confirmation(ctx)
 
 
@@ -231,12 +228,32 @@ class Music(commands.Cog, name='Music'):
         if ctx.voice_client is None:
             if ctx.author.voice:
                 await ctx.author.voice.channel.connect(cls=wavelink.Player)
+                ctx.voice_client.queue = PseudoQueue() # override default queue instance variable
             else:
-                await ctx.send("You are not connected to a voice channel.")
+                raise commands.CommandError("You are not connected to a voice channel.")
+
+
+    @np.before_invoke
+    @queue.before_invoke
+    @skip.before_invoke
+    @remove.before_invoke
+    @clear.before_invoke
+    @seek.before_invoke
+    @restart.before_invoke
+    @stop.before_invoke
+    async def check_voice(self, ctx):
+        if ctx.voice_client is None:
+            raise commands.CommandError("Bot is not connected to a voice channel.")
 
 
     
     @play.error
+    @playnext.error
+    @queue.error
+    @skip.error
+    @seek.error
+    @remove.error
+    @clear.error
     async def error(self, ctx, exception):
         #if isinstance(exception, youtube_dl.utils.DownloadError) or isinstance(exception, youtube_dl.utils.ExtractorError):
         #    await ctx.send("Error: video unavailable")
@@ -248,10 +265,9 @@ class Music(commands.Cog, name='Music'):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
         """Disconnects bot from voice channel if no users are connected and clears queue if bot is disconnected"""
-        if after.channel is None: # User disconnected
-            if member == self.bot.user: # Bot disconnected
-                self.songqueue.clear()
-            elif vc := member.guild.voice_client:
+        # TODO check for correct channel
+        if vc := member.guild.voice_client: # Bot is connected to vc
+            if after.channel is None or after.channel is not vc.channel: # User disconnected or left
                 if not (len(vc.channel.members) > 1): # Bot is the only user connected to the vc
                     await vc.disconnect()
                     
@@ -259,6 +275,8 @@ class Music(commands.Cog, name='Music'):
 
 
 class PseudoQueue:
+    __slots__ = ("list",)
+
     def __init__(self):
         self.list = []
 
