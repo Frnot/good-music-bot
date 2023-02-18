@@ -3,6 +3,7 @@ import os
 import sys
 
 import discord
+import discord.utils
 from discord import Embed
 from discord.ext import commands
 
@@ -22,8 +23,8 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
     @commands.is_owner()
     async def invite(self, ctx):
         """Generate invite link for bot"""
-        permission = 1071631556417
-        invite_link = f"https://discord.com/oauth2/authorize?client_id={self.bot.user.id}&scope=bot&permissions={permission}"
+        permissions = discord.Permissions(1089579515889)
+        invite_link = discord.utils.oauth_url(self.bot.user.id, permissions=permissions)
         log.info(f"Recieved invite command in guild {ctx.guild.name}")
         await ctx.send(invite_link)
 
