@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import os
 import subprocess
 import typing
@@ -120,68 +121,75 @@ class Music(commands.Cog, name='Music'):
 
     @commands.command()
     async def np(self, ctx):
+        if hasattr(ctx.voice_client, "old_np_view"):
+            await ctx.voice_client.old_np_view.expire()
+
         if ctx.voice_client.is_playing():
             track = ctx.voice_client.source
 
-            desc = f"[{track.title}]({track.uri})\n\n"
-            if track.requester:
-                desc += f"Requested by: {track.requester.mention}"
-            if (position := ctx.voice_client.position) == track.duration:
-                desc += f"\nLength: {utils.general.sec_to_minsec(int(track.duration))}"
-            else:
-                desc += f"\n{utils.general.sec_to_minsec(int(position))} / {utils.general.sec_to_minsec(int(track.duration))}"
-
-            msg = Embed(
+            embed = Embed(
                 title = f"Now Playing",
-                description = desc,
+                description = f"[{track.title}]({track.uri})\n",
                 color = utils.rng.random_color()
             )
+            if track.requester:
+                embed.add_field(name="Requested by:", value=track.requester.mention, inline=False)
+            if ctx.voice_client.position == track.duration:
+                position = f"\n{utils.general.sec_to_minsec(0)} / {utils.general.sec_to_minsec(int(track.duration))}"
+                time_remaining = track.duration
+            else:
+                position = f"\n{utils.general.sec_to_minsec(int(ctx.voice_client.position))} / {utils.general.sec_to_minsec(int(track.duration))}"
+                time_remaining = track.duration - ctx.voice_client.position
+            embed.add_field(name="Position", value=position, inline=False)
             if hasattr(track, "thumbnail"):
-                msg.set_thumbnail(url=track.thumbnail)
+                embed.set_thumbnail(url=track.thumbnail)
 
-            await ctx.send(embed=msg)
+            view = NowPlaying(ctx=ctx, 
+                              restart_func=self.restart, 
+                              skip_func=self.skip, 
+                              timeout=time_remaining)
+            view.message = await ctx.send(embed=embed, view=view)
+            ctx.voice_client.old_np_view = view
+
         else:
             await ctx.send("Nothing is playing")
 
 
     @commands.command()
     async def queue(self, ctx):
-        if sq:= ctx.voice_client.queue.show():
-            tracklist = ""
-            for idx,track in enumerate(sq):
-                tracklist += f"{idx+1} :  [{track.title}]({track.uri}) - {track.requester.mention}\n"
-            msg = Embed(
-                title = f"Queued tracks:",
-                description = tracklist,
-                color = utils.rng.random_color()
-            )
-        else:
+        track_list = ctx.voice_client.queue.show()
+        if not track_list:
             msg = Embed(
                 title = f"Queue is empty",
                 color = utils.rng.random_color()
             )
-        await ctx.send(embed=msg)
+            await ctx.send(embed=msg)
+        else:
+            await TrackList(track_list).send(ctx)
 
 
     @commands.command()
-    async def skip(self, ctx, num = None):
+    async def skip(self, ctx, num=None, confirm=True):
         if not num:
             await ctx.voice_client.stop()
-            await utils.general.send_confirmation(ctx)
+            if confirm:
+                await utils.general.send_confirmation(ctx)
         else:
             try:
                 ctx.voice_client.queue.pop(int(num)-1)
                 await ctx.voice_client.stop()
-                await utils.general.send_confirmation(ctx)
+                if confirm:
+                    await utils.general.send_confirmation(ctx)
             except:
                 await ctx.send("Error: please enter a valid index number")
 
 
     @commands.command()
-    async def remove(self, ctx, idx):
+    async def remove(self, ctx, idx, confirm=True):
         try:
             ctx.voice_client.queue.remove(idx)
-            await utils.general.send_confirmation(ctx)
+            if confirm:
+                await utils.general.send_confirmation(ctx)
         except (IndexError, TypeError) as e:
             await ctx.send(e)
             await ctx.send("Enter a valid index")
@@ -194,7 +202,7 @@ class Music(commands.Cog, name='Music'):
 
 
     @commands.command()
-    async def seek(self, ctx, time):
+    async def seek(self, ctx, time, confirm=True):
         try:
             seconds = utils.general.timestr_to_secs(time)
             seektime = seconds*1000
@@ -204,22 +212,24 @@ class Music(commands.Cog, name='Music'):
 
             log.debug(f"seeking to {seconds} seconds")
             await ctx.voice_client.seek(seektime)
-            await utils.general.send_confirmation(ctx)
+            if confirm:
+                await utils.general.send_confirmation(ctx)
         except ValueError:
             await ctx.send("Error: invalid timestamp")
 
 
     @commands.command()
-    async def restart(self, ctx):
+    async def restart(self, ctx, confirm=True):
         """seeks to beginning of song"""
-        await self.seek(ctx, "0")
+        await self.seek(ctx, "0", confirm=confirm)
 
 
     @commands.command()
-    async def stop(self, ctx):
+    async def stop(self, ctx, confirm=True):
         """Stops and disconnects the bot from voice"""
         await ctx.voice_client.disconnect()
-        await utils.general.send_confirmation(ctx)
+        if confirm:
+            await utils.general.send_confirmation(ctx)
 
 
     @play.before_invoke
@@ -271,6 +281,109 @@ class Music(commands.Cog, name='Music'):
                 if not (len(vc.channel.members) > 1): # Bot is the only user connected to the vc
                     await vc.disconnect()
                     
+
+
+class TrackList(discord.ui.View):
+    """discord.py view for tracklist queue"""
+    def __init__(self, track_list, *, timeout = 5):
+        super().__init__(timeout=timeout)
+        self.index = 0
+        self.tracklist = track_list
+        self.pagesize = 10
+        self.pagecount = math.ceil(len(track_list) / self.pagesize)
+
+        if len(track_list) <= self.pagesize:
+            self.clear_items()
+
+
+    @discord.ui.button(label='Previous', style=discord.ButtonStyle.grey, disabled=True)
+    async def previous(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.index -= 1
+        self.children[1].disabled = False
+        if self.index == 0:
+            button.disabled = True
+        await interaction.response.edit_message(view=self, embed=self.generate_embed(self.index))
+
+
+    @discord.ui.button(label='Next', style=discord.ButtonStyle.grey)
+    async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.index += 1
+        self.children[0].disabled = False
+        if self.index == self.pagecount - 1:
+            button.disabled = True
+        await interaction.response.edit_message(view=self, embed=self.generate_embed(self.index))
+
+    
+    async def send(self, ctx):
+        embed = self.generate_embed(0)
+        self.message = await ctx.send(embed=embed, view=self)
+
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        await self.message.edit(view=self)
+
+    
+    def generate_embed(self, page):
+        start_idx = page*self.pagesize
+        tracks = self.tracklist[start_idx:start_idx+self.pagesize]
+        
+        index, title, requester = "", "", ""
+        for i,track in enumerate(tracks):
+            index += f"{start_idx+i+1}\n"
+            title += f"[{track.title[:42]}]({track.uri})\n"
+            requester += f"{track.requester.mention}\n"
+
+        embed = Embed(title = f"Queued tracks: {page+1} / {self.pagecount}",color = utils.rng.random_color())
+        embed.add_field(name="#", value = index)
+        embed.add_field(name="track", value = title)
+        embed.add_field(name="requested by", value = requester)
+
+        return embed
+
+
+
+class NowPlaying(discord.ui.View):
+    """discord.py view to display durrently playing track"""
+    def __init__(self, ctx, restart_func, skip_func, *, timeout = 10):
+        super().__init__(timeout=timeout)
+        self.ctx = ctx
+        self.restart = restart_func
+        self.skip = skip_func
+
+
+    @discord.ui.button(label='Restart', custom_id="restart", style=discord.ButtonStyle.grey)
+    async def restart(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.restart(self.ctx, confirm=False)
+
+        track = interaction.guild.voice_client.source
+        self.timeout = track.duration
+
+        position = f"\n{utils.general.sec_to_minsec(0)} / {utils.general.sec_to_minsec(int(track.duration))}"
+        field_idx = next(i for i,x in enumerate(interaction.message.embeds[0].fields) if x.name == "Position")
+        embed = interaction.message.embeds[0].set_field_at(field_idx, name="Position", value=position)
+        
+        await interaction.response.edit_message(embed=embed)
+
+
+    @discord.ui.button(label='Skip', custom_id="skip", style=discord.ButtonStyle.grey)
+    async def skip(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.skip(self.ctx, confirm=False)
+        button.style = discord.ButtonStyle.red
+        await interaction.response.edit_message(view=self)
+        await self.expire()
+
+
+    async def on_timeout(self):
+        await self.expire()
+
+
+    async def expire(self):
+        for item in self.children:
+            item.disabled = True
+        await self.message.edit(view=self)
+        self.stop()
 
 
 
