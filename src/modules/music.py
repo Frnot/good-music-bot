@@ -4,7 +4,6 @@ import math
 import os
 import subprocess
 import typing
-from time import time
 
 import discord
 import wavelink
@@ -121,7 +120,7 @@ class Music(commands.Cog, name='Music'):
 
     @commands.command()
     async def np(self, ctx):
-        if hasattr(ctx.voice_client, "old_np_view"):
+        if ctx.voice_client.old_np_view:
             await ctx.voice_client.old_np_view.expire()
 
         if ctx.voice_client.is_playing():
@@ -239,6 +238,7 @@ class Music(commands.Cog, name='Music'):
             if ctx.author.voice:
                 await ctx.author.voice.channel.connect(cls=wavelink.Player)
                 ctx.voice_client.queue = PseudoQueue() # override default queue instance variable
+                ctx.voice_client.old_np_view = None
             else:
                 raise commands.CommandError("You are not connected to a voice channel.")
 
@@ -283,9 +283,11 @@ class Music(commands.Cog, name='Music'):
                     
 
 
+# Views are a little convoluted.
+# I have no clue how to write this functionality elegantly
 class TrackList(discord.ui.View):
     """discord.py view for tracklist queue"""
-    def __init__(self, track_list, *, timeout = 5):
+    def __init__(self, track_list, *, timeout = 30):
         super().__init__(timeout=timeout)
         self.index = 0
         self.tracklist = track_list
@@ -337,8 +339,8 @@ class TrackList(discord.ui.View):
 
         embed = Embed(title = f"Queued tracks: {page+1} / {self.pagecount}",color = utils.rng.random_color())
         embed.add_field(name="#", value = index)
-        embed.add_field(name="track", value = title)
-        embed.add_field(name="requested by", value = requester)
+        embed.add_field(name="Track", value = title)
+        embed.add_field(name="Requested by", value = requester)
 
         return embed
 
@@ -360,7 +362,7 @@ class NowPlaying(discord.ui.View):
         track = interaction.guild.voice_client.source
         self.timeout = track.duration
 
-        position = f"\n{utils.general.sec_to_minsec(0)} / {utils.general.sec_to_minsec(int(track.duration))}"
+        position = f"\n{utils.general.sec_to_minsec(0)} / {utils.general.sec_to_minsec(int(track.duration))} (restarted)"
         field_idx = next(i for i,x in enumerate(interaction.message.embeds[0].fields) if x.name == "Position")
         embed = interaction.message.embeds[0].set_field_at(field_idx, name="Position", value=position)
         
