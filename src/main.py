@@ -1,7 +1,9 @@
 import logging
 import os
 import sys
+import time
 
+import aiohttp
 from dotenv import load_dotenv
 
 import bot_main
@@ -27,32 +29,41 @@ log = logging.getLogger(__name__)
 load_dotenv()
 token = os.getenv("TOKEN")   
 
+attempts = 5
 
-try:
-    # Run the Bot
-    log.info("Starting bot")
-    bot_main.run_bot(token)
+while attempts > 0:
+    attempts -= 1
+    try:
+        # Run the Bot
+        log.info("Starting bot")
+        bot_main.run_bot(token)
 
-finally:
-    # Stop loggin queue listener and flush queue
-    logger.stop()
+    except aiohttp.ClientConnectionError:
+        log.info("Failed to connect, retrying")
+        time.sleep(5)
+        continue
 
-    # If shutting down because of restart, execute main with the same arguments
-    if admin_commands.restart:
-        print("Restarting code")
+    finally:
+        # Stop logging queue listener and flush queue
+        logger.stop()
 
-        if sys.platform.startswith('linux'):
-            argv = [sys.executable, __file__] + sys.argv[1:]
-        else:
-            argv = [f"\"{sys.executable}\"", f"\"{__file__}\""] + sys.argv[1:]
+        # If shutting down because of restart, execute main with the same arguments
+        if admin_commands.restart:
+            print("Restarting code")
 
-        try:
-            print(f"Running command: 'os.execv({sys.executable}, {argv})'")
-            os.execv(sys.executable, argv)
-        except Exception as e:
-            print(e)
-            logger.start()
-            log.error(f"Command: 'os.execv({sys.executable}, {argv})' failed.")
-            log.error(e)
-            log.fatal("Cannot restart. exiting.")
-            logger.stop()
+            if sys.platform.startswith('linux'):
+                argv = [sys.executable, __file__] + sys.argv[1:]
+            else:
+                argv = [f"\"{sys.executable}\"", f"\"{__file__}\""] + sys.argv[1:]
+
+            try:
+                print(f"Running command: 'os.execv({sys.executable}, {argv})'")
+                os.execv(sys.executable, argv)
+            except Exception as e:
+                print(e)
+                logger.start()
+                log.error(f"Command: 'os.execv({sys.executable}, {argv})' failed.")
+                log.error(e)
+                log.fatal("Cannot restart. exiting.")
+                logger.stop()
+        break
