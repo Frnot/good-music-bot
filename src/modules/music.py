@@ -4,6 +4,7 @@ import math
 import os
 import subprocess
 import typing
+import re
 
 import discord
 import wavelink
@@ -14,6 +15,13 @@ import utils.general
 import utils.rng
 
 log = logging.getLogger(__name__)
+
+# todo: add undo button for playlist queue
+# todo: check banlist for view interactions
+# todo: check member of vc to view itneractions
+
+#TODO fix bug on force disconnect when more than one person is in call (it's still playing?)
+# bot is active in another server
 
 
 class Music(commands.Cog, name='Music'):
@@ -61,36 +69,46 @@ class Music(commands.Cog, name='Music'):
 
     ##### Commands #####
     @commands.command()
-    async def play(self, ctx, *, request: typing.Union[wavelink.YouTubeTrack, wavelink.YouTubePlaylist, wavelink.SoundCloudTrack], queuetop=False):
+    async def play(self, ctx, *, request, queuetop=False):
         """Streams from a url (doesn't predownload)"""
 
         vc: wavelink.Player = ctx.voice_client
-        queuetrack: function = vc.queue.put_top if queuetop else vc.queue.put
+        queuetracks: function = vc.queue.put_top if queuetop else vc.queue.put
 
-        if isinstance(request, wavelink.YouTubePlaylist):
-            for track in request.tracks:
+        if re.match(r'https?://(?:www\.)?.+', request):
+            try:
+                result = await vc.node.get_playlist(identifier=request, cls=wavelink.YouTubePlaylist)
+            except wavelink.LavalinkException:
+                result = (await vc.node.get_tracks(query=request, cls=wavelink.YouTubeTrack))[0]
+        else:
+            result = (await vc.node.get_tracks(query=f"ytsearch:{request}", cls=wavelink.YouTubeTrack))[0]
+
+        if isinstance(result, wavelink.YouTubePlaylist):
+            playlist = result
+            for track in playlist.tracks:
                 track.requester = ctx.author 
-            queuetrack(request.tracks)
+            queuetracks(playlist.tracks)
 
             msg = Embed(
                 title = f"Queued playlist",
-                description = request.name,
+                description = playlist.name,
                 color = utils.rng.random_color()
             )
             await ctx.send(embed=msg)
+            #TODO have undo view button here
         else:
-            request.requester = ctx.author
-            queue_pos = queuetrack(request)
+            track = result
+            track.requester = ctx.author
+            queue_pos = queuetracks(track)
 
             if ctx.voice_client.is_playing():
                 msg = Embed(
                     title = f"Track queued - Position {queue_pos}",
-                    description = request.title,
-                    url = request.uri,
+                    description = track.title,
+                    url = track.uri,
                     color = utils.rng.random_color()
                 )
-                if hasattr(request, "thumbnail"):
-                    msg.set_image(url=request.thumbnail)
+                msg.set_image(url=result.thumbnail)
                 await ctx.send(embed=msg)
 
         # If bot isn't playing, process queue
@@ -113,7 +131,7 @@ class Music(commands.Cog, name='Music'):
 
 
     @commands.command()
-    async def playnext(self, ctx, *, request: typing.Union[wavelink.YouTubeTrack, wavelink.YouTubePlaylist, wavelink.SoundCloudTrack]):
+    async def playnext(self, ctx, *, request):
         """Adds song to top of play queue"""
         await self.play(ctx, request=request, queuetop=True)
 
