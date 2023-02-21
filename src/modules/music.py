@@ -335,7 +335,7 @@ class TrackList(discord.ui.View):
 
 
     async def interaction_check(self, interaction: discord.Interaction):
-        if await self.ctx.bot.get_cog('Permissions').has_permission(self.ctx):
+        if await self.ctx.bot.get_cog('Permissions').query_banlist(self.ctx.author.id):
             return self.ctx.author.voice.channel == self.ctx.voice_client.channel
         
 
@@ -401,7 +401,7 @@ class NowPlaying(discord.ui.View):
 
 
     async def interaction_check(self, interaction: discord.Interaction):
-        if await self.ctx.bot.get_cog('Permissions').has_permission(self.ctx):
+        if await self.ctx.bot.get_cog('Permissions').query_banlist(self.ctx.author.id):
             return self.ctx.author.voice.channel == self.ctx.voice_client.channel
 
 
