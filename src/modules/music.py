@@ -333,16 +333,21 @@ class TrackList(discord.ui.View):
             button.disabled = True
         await interaction.response.edit_message(view=self, embed=self.generate_embed(self.index))
 
-    
-    async def send(self, ctx):
-        embed = self.generate_embed(0)
-        self.message = await ctx.send(embed=embed, view=self)
 
+    async def interaction_check(self, interaction: discord.Interaction):
+        if await self.ctx.bot.get_cog('Permissions').has_permission(self.ctx):
+            return self.ctx.author.voice.channel == self.ctx.voice_client.channel
+        
 
     async def on_timeout(self):
         for item in self.children:
             item.disabled = True
         await self.message.edit(view=self)
+
+    
+    async def send(self, ctx):
+        embed = self.generate_embed(0)
+        self.message = await ctx.send(embed=embed, view=self)
 
     
     def generate_embed(self, page):
@@ -393,6 +398,11 @@ class NowPlaying(discord.ui.View):
         button.style = discord.ButtonStyle.red
         await interaction.response.edit_message(view=self)
         await self.expire()
+
+
+    async def interaction_check(self, interaction: discord.Interaction):
+        if await self.ctx.bot.get_cog('Permissions').has_permission(self.ctx):
+            return self.ctx.author.voice.channel == self.ctx.voice_client.channel
 
 
     async def on_timeout(self):
