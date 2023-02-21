@@ -83,3 +83,19 @@ class Permissions(commands.Cog, name='Permissions'):
 
 class UserIsBanned(commands.CheckFailure):
     pass
+
+
+async def can_interact(view, interaction):
+    view.ctx.interaction = interaction
+    banned = await view.ctx.bot.get_cog('Permissions').query_banlist(view.ctx.author.id)
+    in_channel = view.ctx.author.voice.channel == view.ctx.voice_client.channel
+    
+    if not banned and in_channel:
+        return True
+    else:
+        if banned:
+            await view.ctx.send("Fuck you!", ephemeral=True)
+        else:
+            await view.ctx.send("You must be in the voice channel to perform that action", ephemeral=True)
+        return False
+    

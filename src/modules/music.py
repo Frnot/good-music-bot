@@ -13,6 +13,7 @@ from discord.ext import commands
 
 import utils.general
 import utils.rng
+import modules.permissions
 
 log = logging.getLogger(__name__)
 
@@ -335,8 +336,7 @@ class TrackList(discord.ui.View):
 
 
     async def interaction_check(self, interaction: discord.Interaction):
-        if not await self.ctx.bot.get_cog('Permissions').query_banlist(self.ctx.author.id):
-            return self.ctx.author.voice.channel == self.ctx.voice_client.channel
+        return await modules.permissions.can_interact(self, interaction)
         
 
     async def on_timeout(self):
@@ -401,8 +401,7 @@ class NowPlaying(discord.ui.View):
 
 
     async def interaction_check(self, interaction: discord.Interaction):
-        if not await self.ctx.bot.get_cog('Permissions').query_banlist(self.ctx.author.id):
-            return self.ctx.author.voice.channel == self.ctx.voice_client.channel
+        return await modules.permissions.can_interact(self, interaction)
 
 
     async def on_timeout(self):
