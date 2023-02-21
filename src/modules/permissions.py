@@ -92,10 +92,9 @@ async def can_interact(view, interaction):
     
     if not banned and in_channel:
         return True
-    else:
-        if banned:
-            await view.ctx.send("Fuck you!", ephemeral=True)
-        else:
-            await view.ctx.send("You must be in the voice channel to perform that action", ephemeral=True)
-        return False
+    elif banned:
+        await view.ctx.send("Fuck you!", ephemeral=True)
+    elif not in_channel:
+        await view.ctx.send("You must be in the voice channel to perform that action", ephemeral=True)
+    return False
     
