@@ -13,13 +13,10 @@ from discord.ext import commands
 
 import utils.general
 import utils.rng
-import modules.permissions
 
 log = logging.getLogger(__name__)
 
 # todo: add undo button for playlist queue
-# todo: check banlist for view interactions
-# todo: check member of vc to view itneractions
 
 #TODO fix bug on force disconnect when more than one person is in call (it's still playing?)
 # bot is active in another server
@@ -299,12 +296,36 @@ class Music(commands.Cog, name='Music'):
             if after.channel is None or after.channel is not vc.channel: # User disconnected or left
                 if not (len(vc.channel.members) > 1): # Bot is the only user connected to the vc
                     await vc.disconnect()
-                    
+     
+
+
+class GatedView(discord.ui.View):
+    async def interaction_check(self, interaction: discord.Interaction):
+        banned = await self.ctx.bot.get_cog('Permissions').query_banlist(self.ctx.author.id)
+        in_channel = self.ctx.author.voice.channel == self.ctx.voice_client.channel if self.ctx.author.voice else False
+
+        if not banned and in_channel:
+            return True
+        elif banned:
+            await interaction.response.send_message("Fuck you!", ephemeral=True, delete_after=10)
+        elif not in_channel:
+            await interaction.response.send_message("You must be in the voice channel to perform that action", ephemeral=True, delete_after=10)
+        return False
+
+    async def on_timeout(self):
+        await self.expire()
+
+    async def expire(self):
+        for item in self.children:
+            item.disabled = True
+        await self.message.edit(view=self)
+        self.stop()
+
 
 
 # Views are a little convoluted.
 # I have no clue how to write this functionality elegantly
-class TrackList(discord.ui.View):
+class TrackList(GatedView):
     """discord.py view for tracklist queue"""
     def __init__(self, track_list, *, timeout = 30):
         super().__init__(timeout=timeout)
@@ -335,28 +356,18 @@ class TrackList(discord.ui.View):
         await interaction.response.edit_message(view=self, embed=self.generate_embed(self.index))
 
 
-    async def interaction_check(self, interaction: discord.Interaction):
-        return await modules.permissions.can_interact(self, interaction)
-        
-
-    async def on_timeout(self):
-        for item in self.children:
-            item.disabled = True
-        await self.message.edit(view=self)
-
-    
     async def send(self, ctx):
         embed = self.generate_embed(0)
         self.message = await ctx.send(embed=embed, view=self)
 
-    
+
     def generate_embed(self, page):
         start_idx = page*self.pagesize
         tracks = self.tracklist[start_idx:start_idx+self.pagesize]
         
         index, title, requester = "", "", ""
-        for i,track in enumerate(tracks):
-            index += f"{start_idx+i+1}\n"
+        for i,track in enumerate(tracks, start=1):
+            index += f"{start_idx+i}\n"
             title += f"[{track.title[:42]}]({track.uri})\n"
             requester += f"{track.requester.mention}\n"
 
@@ -369,7 +380,7 @@ class TrackList(discord.ui.View):
 
 
 
-class NowPlaying(discord.ui.View):
+class NowPlaying(GatedView):
     """discord.py view to display durrently playing track"""
     def __init__(self, ctx, restart_func, skip_func, *, timeout = 10):
         super().__init__(timeout=timeout)
@@ -398,21 +409,6 @@ class NowPlaying(discord.ui.View):
         button.style = discord.ButtonStyle.red
         await interaction.response.edit_message(view=self)
         await self.expire()
-
-
-    async def interaction_check(self, interaction: discord.Interaction):
-        return await modules.permissions.can_interact(self, interaction)
-
-
-    async def on_timeout(self):
-        await self.expire()
-
-
-    async def expire(self):
-        for item in self.children:
-            item.disabled = True
-        await self.message.edit(view=self)
-        self.stop()
 
 
 
