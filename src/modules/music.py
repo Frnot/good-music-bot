@@ -302,7 +302,7 @@ class Music(commands.Cog, name='Music'):
 class GatedView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction):
         banned = await self.ctx.bot.get_cog('Permissions').query_banlist(self.ctx.author.id)
-        in_channel = self.ctx.author.voice.channel == self.ctx.voice_client.channel if self.ctx.author.voice else False
+        in_channel = interaction.user.voice.channel == self.ctx.voice_client.channel if interaction.user.voice else False
 
         if not banned and in_channel:
             return True
