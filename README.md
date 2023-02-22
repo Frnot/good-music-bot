@@ -6,6 +6,7 @@ run `pip install .` to install required dependencies
 ### API docs
 https://discordpy.readthedocs.io/en/latest/api.html#
 
+https://wavelink.readthedocs.io/en/latest/
 
 
 --------------------------------------------------------
