@@ -6,14 +6,15 @@ run `pip install .` to install required dependencies
 ### API docs
 https://discordpy.readthedocs.io/en/latest/api.html#
 
+https://wavelink.readthedocs.io/en/latest/
 
 
 --------------------------------------------------------
 
 ## linux dependencies ##
 
-* python3 
-* python3-devel
+* python3.11
+* python3-devel (or equiv compile options?)
 * libffi-dev
 * git (for automatic updates)
 * tmux (for interactable autostart)
