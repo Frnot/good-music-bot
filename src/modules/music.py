@@ -294,11 +294,11 @@ class Music(commands.Cog, name='Music'):
         """Disconnects bot from voice channel if no users are connected and clears queue if bot is disconnected"""
         if vc := member.guild.voice_client: # Bot is/was connected to vc
             if after.channel is None or after.channel is not vc.channel: # User disconnected or left
-                if member.id == self.bot.user.id: # Bot was forcefully disconnected
+                # Bot was forcefully disconnected or Bot is the only user connected to the vc
+                if member.id == self.bot.user.id or not (len(vc.channel.members) > 1): 
+                    await vc.old_np_view.expire()
                     await vc.disconnect()
-                elif not (len(vc.channel.members) > 1): # Bot is the only user connected to the vc
-                    await vc.disconnect()
-     
+
 
 
 class GatedView(discord.ui.View):
