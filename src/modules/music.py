@@ -327,7 +327,7 @@ class Player(wavelink.Player):
 
 class ExpiringView(discord.ui.View):
     """Expiring views will disable all childen upon calling expire()"""
-    def __init__(self, track_list, *, timeout = 30):
+    def __init__(self, *, timeout = 30):
         super().__init__(timeout=timeout)
 
     async def on_timeout(self):
