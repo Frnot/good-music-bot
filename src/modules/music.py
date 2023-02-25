@@ -2,22 +2,22 @@ import asyncio
 import logging
 import math
 import os
-import subprocess
-import typing
 import re
+import subprocess
 
 import discord
 import wavelink
 from discord import Embed
 from discord.ext import commands
 
-from modules.permissions import Permissions
 import utils.general
 import utils.rng
+from modules.permissions import Permissions
 
 log = logging.getLogger(__name__)
 
-# todo: dont make undo action expire upon new queue action
+# todo: dont make undo action expire upon new queue action 
+# (send each track obj pointer to its respective undo view)
 
 
 class Music(commands.Cog, name='Music'):
@@ -62,13 +62,27 @@ class Music(commands.Cog, name='Music'):
         log.info(f'Lavalink Node: <{node.identifier}> is ready!')
 
 
+    @commands.Cog.listener()
+    async def on_wavelink_track_start(self, vc, track):
+        await self.np(vc.spawn_ctx)
+
+
+    @commands.Cog.listener()
+    async def on_wavelink_track_end(self, vc, track, reason):
+        if not vc.queue.is_empty():
+            new_track = vc.queue.pop()
+            await vc.play(new_track)
+        else:
+            vc.spawn_ctx = None
+            await vc.stop()
+
 
     ##### Commands #####
     @commands.command()
     async def play(self, ctx, *, request, queuetop=False):
         """Streams from a url (doesn't predownload)"""
 
-        vc: wavelink.Player = ctx.voice_client
+        vc: Player = ctx.voice_client
         queuetracks: function = vc.queue.put_top if queuetop else vc.queue.put
 
         if re.match(r'https?://(?:www\.)?.+', request):
@@ -79,9 +93,9 @@ class Music(commands.Cog, name='Music'):
         else:
             result = (await vc.node.get_tracks(query=f"ytsearch:{request}", cls=wavelink.YouTubeTrack))[0]
 
-        if ctx.voice_client.old_undo_view:
-            await ctx.voice_client.old_undo_view.expire()
-            ctx.voice_client.old_undo_view = None
+        if vc.old_undo_view:
+            await vc.old_undo_view.expire()
+            vc.old_undo_view = None
 
         if isinstance(result, wavelink.YouTubePlaylist):
             playlist = result
@@ -94,46 +108,35 @@ class Music(commands.Cog, name='Music'):
                 description = playlist.name,
                 color = utils.rng.random_color()
             )
-            view = Undo(undo_func=ctx.voice_client.queue.undo,
+            view = Undo(undo_func=vc.queue.undo,
                         requester_id=ctx.author.id)
             view.message = await ctx.send(embed=embed, view=view)
-            ctx.voice_client.old_undo_view = view
+            vc.old_undo_view = view
 
         else:
             track = result
             track.requester = ctx.author
             queue_pos = queuetracks(track)
 
-            if ctx.voice_client.is_playing():
+            if vc.is_playing():
                 embed = Embed(
                     title = f"Track queued - Position {queue_pos}",
                     description = track.title,
                     url = track.uri,
                     color = utils.rng.random_color()
                 )
-                embed.set_image(url=result.thumbnail)
-                view = Undo(undo_func=ctx.voice_client.queue.undo,
+                embed.set_thumbnail(url=result.thumbnail)
+                view = Undo(undo_func=vc.queue.undo,
                             requester_id=ctx.author.id)
                 view.message = await ctx.send(embed=embed, view=view)
-                ctx.voice_client.old_undo_view = view
+                vc.old_undo_view = view
 
         # If bot isn't playing, process queue
-        if not ctx.voice_client.is_playing():
-            try:
-                while not vc.queue.empty():
-                    track = vc.queue.pop()
-                    try:
-                        await vc.play(track)
-                    except Exception as e:
-                        log.info(f"Encountered error:{e}")
-                        continue
-                    await self.np(ctx)
+        if not vc.is_playing() and not vc.spawn_ctx:
+            vc.spawn_ctx = ctx
+            track = vc.queue.pop()
+            await vc.play(track)
 
-                    while ctx.voice_client.is_playing():
-                        await asyncio.sleep(0.1)
-            except AttributeError: # voice_client annihilation when disconnected
-                pass
-                    
 
 
     @commands.command()
@@ -144,11 +147,14 @@ class Music(commands.Cog, name='Music'):
 
     @commands.command()
     async def np(self, ctx):
-        if ctx.voice_client.old_np_view:
-            await ctx.voice_client.old_np_view.expire()
+        """Shows info of currently playing track"""
 
-        if ctx.voice_client.is_playing():
-            track = ctx.voice_client.source
+        vc: Player = ctx.voice_client
+        if vc.old_np_view:
+            await vc.old_np_view.expire()
+
+        if vc.is_playing():
+            track = vc.source
 
             embed = Embed(
                 title = f"Now Playing",
@@ -157,12 +163,12 @@ class Music(commands.Cog, name='Music'):
             )
             if track.requester:
                 embed.add_field(name="Requested by:", value=track.requester.mention, inline=False)
-            if ctx.voice_client.position == track.duration:
+            if vc.position == track.duration:
                 position = f"\n{utils.general.sec_to_minsec(0)} / {utils.general.sec_to_minsec(int(track.duration))}"
                 time_remaining = track.duration
             else:
-                position = f"\n{utils.general.sec_to_minsec(int(ctx.voice_client.position))} / {utils.general.sec_to_minsec(int(track.duration))}"
-                time_remaining = track.duration - ctx.voice_client.position
+                position = f"\n{utils.general.sec_to_minsec(int(vc.position))} / {utils.general.sec_to_minsec(int(track.duration))}"
+                time_remaining = track.duration - vc.position
             embed.add_field(name="Position", value=position, inline=False)
             if hasattr(track, "thumbnail"):
                 embed.set_thumbnail(url=track.thumbnail)
@@ -172,7 +178,7 @@ class Music(commands.Cog, name='Music'):
                               skip_func=self.skip, 
                               timeout=time_remaining)
             view.message = await ctx.send(embed=embed, view=view)
-            ctx.voice_client.old_np_view = view
+            vc.old_np_view = view
 
         else:
             await ctx.send("Nothing is playing")
@@ -260,11 +266,8 @@ class Music(commands.Cog, name='Music'):
     async def ensure_voice(self, ctx):
         if ctx.voice_client is None:
             if ctx.author.voice:
-                await ctx.author.voice.channel.connect(cls=wavelink.Player)
-                ctx.voice_client.queue = PseudoQueue() # override default queue instance variable
-                # TODO: clean this garbage up
-                ctx.voice_client.old_np_view = None
-                ctx.voice_client.old_undo_view = None
+                await ctx.author.voice.channel.connect(cls=Player)
+                discord.VoiceChannel.connect
             else:
                 raise commands.CommandError("You are not connected to a voice channel.")
 
@@ -311,9 +314,22 @@ class Music(commands.Cog, name='Music'):
 
 
 
+class Player(wavelink.Player):
+    def __init__(self, client, channel):
+        super().__init__(client, channel)
+
+        self.queue = PseudoQueue()
+        self.spawn_ctx = None
+        self.old_np_view = None
+        self.old_undo_view = None
+
+
 
 class ExpiringView(discord.ui.View):
     """Expiring views will disable all childen upon calling expire()"""
+    def __init__(self, track_list, *, timeout = 30):
+        super().__init__(timeout=timeout)
+
     async def on_timeout(self):
         await self.expire()
 
@@ -446,10 +462,10 @@ class Undo(ExpiringView):
 
     @discord.ui.button(label='Undo', style=discord.ButtonStyle.grey)
     async def undo(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.undo_func()
         button.disabled = True
         button.style = discord.ButtonStyle.red
         await interaction.response.edit_message(view=self)
+        self.undo_func()
 
 
 
@@ -503,5 +519,5 @@ class PseudoQueue:
     def show(self):
         return self.list.copy()
 
-    def empty(self):
+    def is_empty(self):
         return not self.list

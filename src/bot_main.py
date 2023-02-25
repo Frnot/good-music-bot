@@ -3,7 +3,6 @@ import sys
 
 import discord
 from discord.ext import commands as dcommands
-from dotenv import load_dotenv
 
 if sys.version_info >= (3, 8):
     from importlib import metadata
