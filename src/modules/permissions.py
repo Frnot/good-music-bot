@@ -69,6 +69,7 @@ class Permissions(commands.Cog, name='Permissions'):
         await db.delete("banlist", ["user_id", id])
 
 
+    @classmethod
     async def query_banlist(self, id):
         try:
             if await db.select("user_id", "banlist", "user_id", id) is not None:

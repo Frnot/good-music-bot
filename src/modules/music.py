@@ -11,15 +11,13 @@ import wavelink
 from discord import Embed
 from discord.ext import commands
 
+from modules.permissions import Permissions
 import utils.general
 import utils.rng
 
 log = logging.getLogger(__name__)
 
-# todo: add undo button for playlist queue
-
-#TODO fix bug on force disconnect when more than one person is in call (it's still playing?)
-# bot is active in another server
+# todo: dont make undo action expire upon new queue action
 
 
 class Music(commands.Cog, name='Music'):
@@ -81,33 +79,43 @@ class Music(commands.Cog, name='Music'):
         else:
             result = (await vc.node.get_tracks(query=f"ytsearch:{request}", cls=wavelink.YouTubeTrack))[0]
 
+        if ctx.voice_client.old_undo_view:
+            await ctx.voice_client.old_undo_view.expire()
+            ctx.voice_client.old_undo_view = None
+
         if isinstance(result, wavelink.YouTubePlaylist):
             playlist = result
             for track in playlist.tracks:
                 track.requester = ctx.author 
             queuetracks(playlist.tracks)
 
-            msg = Embed(
+            embed = Embed(
                 title = f"Queued playlist",
                 description = playlist.name,
                 color = utils.rng.random_color()
             )
-            await ctx.send(embed=msg)
-            #TODO have undo view button here
+            view = Undo(undo_func=ctx.voice_client.queue.undo,
+                        requester_id=ctx.author.id)
+            view.message = await ctx.send(embed=embed, view=view)
+            ctx.voice_client.old_undo_view = view
+
         else:
             track = result
             track.requester = ctx.author
             queue_pos = queuetracks(track)
 
             if ctx.voice_client.is_playing():
-                msg = Embed(
+                embed = Embed(
                     title = f"Track queued - Position {queue_pos}",
                     description = track.title,
                     url = track.uri,
                     color = utils.rng.random_color()
                 )
-                msg.set_image(url=result.thumbnail)
-                await ctx.send(embed=msg)
+                embed.set_image(url=result.thumbnail)
+                view = Undo(undo_func=ctx.voice_client.queue.undo,
+                            requester_id=ctx.author.id)
+                view.message = await ctx.send(embed=embed, view=view)
+                ctx.voice_client.old_undo_view = view
 
         # If bot isn't playing, process queue
         if not ctx.voice_client.is_playing():
@@ -254,7 +262,9 @@ class Music(commands.Cog, name='Music'):
             if ctx.author.voice:
                 await ctx.author.voice.channel.connect(cls=wavelink.Player)
                 ctx.voice_client.queue = PseudoQueue() # override default queue instance variable
+                # TODO: clean this garbage up
                 ctx.voice_client.old_np_view = None
+                ctx.voice_client.old_undo_view = None
             else:
                 raise commands.CommandError("You are not connected to a voice channel.")
 
@@ -301,19 +311,9 @@ class Music(commands.Cog, name='Music'):
 
 
 
-class GatedView(discord.ui.View):
-    async def interaction_check(self, interaction: discord.Interaction):
-        banned = await self.ctx.bot.get_cog('Permissions').query_banlist(interaction.user.id)
-        in_channel = interaction.user.voice.channel == self.ctx.voice_client.channel if interaction.user.voice else False
 
-        if not banned and in_channel:
-            return True
-        elif banned:
-            await interaction.response.send_message("Fuck you!", ephemeral=True, delete_after=10)
-        elif not in_channel:
-            await interaction.response.send_message("You must be in the voice channel to perform that action", ephemeral=True, delete_after=10)
-        return False
-
+class ExpiringView(discord.ui.View):
+    """Expiring views will disable all childen upon calling expire()"""
     async def on_timeout(self):
         await self.expire()
 
@@ -325,8 +325,22 @@ class GatedView(discord.ui.View):
 
 
 
-# Views are a little convoluted.
-# I have no clue how to write this functionality elegantly
+class GatedView(ExpiringView):
+    """Gated views check for user permission before allowing interactions"""
+    async def interaction_check(self, interaction: discord.Interaction):
+        banned = await Permissions.query_banlist(interaction.user.id)
+        in_channel = interaction.user.voice.channel == interaction.guild.voice_client.channel if interaction.user.voice else False
+
+        if not banned and in_channel:
+            return True
+        elif banned:
+            await interaction.response.send_message("Fuck you!", ephemeral=True, delete_after=10)
+        elif not in_channel:
+            await interaction.response.send_message("You must be in the voice channel to perform that action", ephemeral=True, delete_after=10)
+        return False
+
+
+
 class TrackList(GatedView):
     """discord.py view for tracklist queue"""
     def __init__(self, track_list, *, timeout = 30):
@@ -387,13 +401,13 @@ class NowPlaying(GatedView):
     def __init__(self, ctx, restart_func, skip_func, *, timeout = 10):
         super().__init__(timeout=timeout)
         self.ctx = ctx
-        self.restart = restart_func
-        self.skip = skip_func
+        self.restart_func = restart_func
+        self.skip_func = skip_func
 
 
     @discord.ui.button(label='Restart', custom_id="restart", style=discord.ButtonStyle.grey)
     async def restart(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.restart(self.ctx, confirm=False)
+        await self.restart_func(self.ctx, confirm=False)
 
         track = interaction.guild.voice_client.source
         self.timeout = track.duration
@@ -407,15 +421,40 @@ class NowPlaying(GatedView):
 
     @discord.ui.button(label='Skip', custom_id="skip", style=discord.ButtonStyle.grey)
     async def skip(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.skip(self.ctx, confirm=False)
+        await self.skip_func(self.ctx, confirm=False)
         button.style = discord.ButtonStyle.red
         await interaction.response.edit_message(view=self)
         await self.expire()
 
 
 
+class Undo(ExpiringView):
+    """discord.py view for undo button"""
+    def __init__(self, *, undo_func, requester_id, timeout = 30):
+        super().__init__(timeout=timeout)
+        self.undo_func = undo_func
+        self.requester_id = requester_id
+
+    
+    async def interaction_check(self, interaction: discord.Interaction):
+        if interaction.user.id != self.requester_id:
+            await interaction.response.send_message("You did not queue this item.", ephemeral=True, delete_after=10)
+            return False
+        else:
+            return True
+
+
+    @discord.ui.button(label='Undo', style=discord.ButtonStyle.grey)
+    async def undo(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.undo_func()
+        button.disabled = True
+        button.style = discord.ButtonStyle.red
+        await interaction.response.edit_message(view=self)
+
+
+
 class PseudoQueue:
-    __slots__ = ("list",)
+    __slots__ = ("list","mru")
 
     def __init__(self):
         self.list = []
@@ -433,17 +472,21 @@ class PseudoQueue:
             return element
 
     def put(self, item) -> int:
-        try:
+        self.mru = (0, len(self.list))
+        try: # item is iterable
             self.list.extend(item)
         except:
             self.list.append(item)
         return len(self.list)
 
+
     def put_top(self, item) -> int:
-        try:
+        try: # item is iterable
+            self.mru = (len(item), None)
             item.extend(self.list)
             self.list = item
         except:
+            self.mru = (1, None)
             self.list.insert(0, item)
         return 1
 
@@ -452,6 +495,10 @@ class PseudoQueue:
 
     def remove(self, idx):
         del self.list[int(idx)-1]
+
+    def undo(self):
+        self.list = self.list[self.mru[0]:self.mru[1]]
+        self.mru = None
 
     def show(self):
         return self.list.copy()
