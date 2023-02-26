@@ -69,12 +69,18 @@ class Music(commands.Cog, name='Music'):
 
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, vc, track, reason):
-        if not vc.queue.is_empty():
-            new_track = vc.queue.pop()
-            await vc.play(new_track)
+        # track doesn't have requester attribute
+        if vc.loop_track and reason == "FINISHED":
+            await vc.play(vc.loop_track)
         else:
-            vc.spawn_ctx = None
-            await vc.stop()
+            if vc.loop_track:
+                vc.loop_track = None
+            if not vc.queue.is_empty():
+                new_track = vc.queue.pop()
+                await vc.play(new_track)
+            else:
+                vc.spawn_ctx = None
+                await vc.stop()
 
 
     ##### Commands #####
@@ -169,7 +175,9 @@ class Music(commands.Cog, name='Music'):
             else:
                 position = f"\n{utils.general.sec_to_minsec(int(vc.position))} / {utils.general.sec_to_minsec(int(track.duration))}"
                 time_remaining = track.duration - vc.position
-            embed.add_field(name="Position", value=position, inline=False)
+            embed.add_field(name="Position", value=position, inline=True)
+            loopmode = "Enabled" if vc.loop_track else "Disabled"
+            embed.add_field(name="Loopmode", value="Enabled" if vc.loop_track else "Disabled", inline=True)
             if hasattr(track, "thumbnail"):
                 embed.set_thumbnail(url=track.thumbnail)
 
@@ -211,6 +219,26 @@ class Music(commands.Cog, name='Music'):
                     await utils.general.send_confirmation(ctx)
             except:
                 await ctx.send("Error: please enter a valid index number")
+
+    
+    @commands.command()
+    async def loop(self, ctx):
+        if ctx.voice_client.loop_track:
+            await ctx.send("Disabled loop mode")
+            ctx.voice_client.loop_track = None
+        else:
+            track = ctx.voice_client.source
+            embed = Embed(
+                title = f"Looping Track",
+                description = f"[{track.title}]({track.uri})\n",
+                color = utils.rng.random_color()
+            )
+            if track.requester:
+                embed.add_field(name="Requested by:", value=ctx.author.mention)
+            if hasattr(track, "thumbnail"):
+                embed.set_thumbnail(url=track.thumbnail)
+            await ctx.send(embed=embed)
+            ctx.voice_client.loop_track = track
 
 
     @commands.command()
@@ -275,6 +303,7 @@ class Music(commands.Cog, name='Music'):
     @np.before_invoke
     @queue.before_invoke
     @skip.before_invoke
+    @loop.before_invoke
     @remove.before_invoke
     @clear.before_invoke
     @seek.before_invoke
@@ -319,6 +348,7 @@ class Player(wavelink.Player):
         super().__init__(client, channel)
 
         self.queue = PseudoQueue()
+        self.loop_track = None
         self.spawn_ctx = None
         self.old_np_view = None
         self.old_undo_view = None
