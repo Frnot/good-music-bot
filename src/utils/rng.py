@@ -7,8 +7,8 @@ log = logging.getLogger(__name__)
 def random_color():
     # no grays
     H = random.randint(0, 359)
-    S = (random.randint(40, 100) / 100.0)
-    V = (random.randint(80, 100) / 100.0)
+    S = random.randint(60, 80) / 100.0
+    V = random.randint(60, 80) / 100.0
     return HSV_to_RGBInt(H, S, V)
 
 def HSV_to_RGBInt(H, S, V):

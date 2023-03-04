@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "good_music_bot"
-version = "2.8.3"
+version = "2.8.4"
 description = "A discord music bot powered by discord.py and Wavelink"
 readme = "README.md"
 

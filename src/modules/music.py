@@ -253,10 +253,16 @@ class Player(wavelink.Player):
 
         self.queue = PseudoQueue()
         self.status_view = None
+        self.misc_views = []
         self.skipped_tracks = None
         self.loop_track = None
         self.spawn_ctx = None
         self.pagesize = 10
+
+
+    async def disconnect(self):
+        await super().disconnect()
+        await self.expire_all_views()
 
 
     ### Model ###
@@ -285,6 +291,7 @@ class Player(wavelink.Player):
                 color = utils.rng.random_color()
             )
             view = Undo(undo_op=(self.queue.unqueue, playlist.tracks), requester_id=author.id)
+            self.misc_views.append(view)
 
         else:
             track = result
@@ -300,6 +307,7 @@ class Player(wavelink.Player):
                 )
                 embed.set_thumbnail(url=result.thumbnail)
                 view = Undo(undo_op=(self.queue.unqueue,[track]),requester_id=author.id)
+                self.misc_views.append(view)
                 
 
         # If bot isn't playing, process queue
@@ -403,6 +411,10 @@ class Player(wavelink.Player):
         if self.status_view:
             await self.status_view.expire()
             self.status_view = None
+
+        for view in self.misc_views:
+            await view.expire()
+        self.misc_views.clear()
 
 
     ### View ###
