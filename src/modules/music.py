@@ -198,7 +198,7 @@ class Music(commands.Cog, name='Music'):
             if after.channel is None or after.channel is not vc.channel: # User disconnected or left
                 # Bot was forcefully disconnected or Bot is the only user connected to the vc
                 if member.id == self.bot.user.id or not (len(vc.channel.members) > 1): 
-                    await vc.old_np_view.expire()
+                    await vc.expire_views()
                     await vc.disconnect()
 
 
@@ -248,7 +248,6 @@ class Player(wavelink.Player):
 
         self.loop_track = None
         self.spawn_ctx = None
-        self.old_np_view = None
         self.pagesize = 10
 
 
@@ -376,6 +375,9 @@ class Player(wavelink.Player):
             )
             return(embed, None)
 
+
+    async def expire_views(self):
+        await self.statusview.expire()
 
 
     ### View ###
@@ -513,7 +515,6 @@ class MusicControls(GatedView):
     @discord.ui.button(label='Restart', custom_id="restart", style=discord.ButtonStyle.grey)
     async def restart_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.vc.restart()
-        # Update view timeout
         self.timeout = self.vc.source.duration
         embed = await self.vc.generate_status()
         await interaction.response.edit_message(embed=embed)
