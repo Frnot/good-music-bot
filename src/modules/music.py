@@ -379,8 +379,7 @@ class Player(wavelink.Player):
 
     async def status(self, response_channel=None):
         if self.is_playing():
-            embed = await self.generate_status()
-            time_remaining = self.source.duration - self.position
+            embed, time_remaining = await self.generate_status()
             if not self.status_view:
                 self.status_view = MusicControls(self, timeout=time_remaining)
             self.status_view.messages.append(await response_channel.send(embed=embed, view=self.status_view))
@@ -435,7 +434,8 @@ class Player(wavelink.Player):
         embed.add_field(name="Position", value=position, inline=False)
         if hasattr(track, "thumbnail"):
             embed.set_thumbnail(url=track.thumbnail)
-        return embed
+        time_remaining = self.source.duration - self.position
+        return embed, time_remaining
 
 
 
@@ -567,13 +567,16 @@ class MusicControls(GatedView):
 
     @discord.ui.button(label='Loop', custom_id="loop")
     async def loop_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed, timeout = self.vc.generate_status()
         if await self.vc.loop():
             button.style = discord.ButtonStyle.green
+            self.timeout = None
         else:
             button.style = discord.ButtonStyle.grey
+            self.timeout = timeout
         await interaction.response.defer()
-        for m in reversed(self.messages):
-            await m.edit(view=self)
+        for msg in reversed(self.messages):
+            await msg.edit(embed=embed, view=self)
 
 
 
