@@ -575,9 +575,10 @@ class MusicControls(GatedView):
         else:
             button.style = discord.ButtonStyle.grey
             self.timeout = timeout
-        await interaction.response.defer()
+        #await interaction.response.defer()
+        await interaction.response.edit_message(view=self)
         for msg in reversed(self.messages):
-            await msg.edit(view=self)
+            await msg.edit(embed=embed, view=self)
 
 
 
