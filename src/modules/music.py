@@ -568,15 +568,14 @@ class MusicControls(GatedView):
 
     @discord.ui.button(label='Loop', custom_id="loop")
     async def loop_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed, timeout = self.vc.generate_status()
+        embed, timeout = await self.vc.generate_status()
         if await self.vc.loop():
             button.style = discord.ButtonStyle.green
             self.timeout = None
         else:
             button.style = discord.ButtonStyle.grey
             self.timeout = timeout
-        #await interaction.response.defer()
-        await interaction.response.edit_message(view=self)
+        await interaction.response.defer()
         for msg in reversed(self.messages):
             await msg.edit(embed=embed, view=self)
 
