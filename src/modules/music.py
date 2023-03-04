@@ -110,6 +110,12 @@ class Music(commands.Cog, name='Music'):
 
 
     @commands.command()
+    async def deskip(self, ctx):
+        if await ctx.voice_client.deskip():
+            await utils.general.send_confirmation(ctx)
+
+
+    @commands.command()
     async def seek(self, ctx, time):
         await ctx.voice_client.seek(time)
         await utils.general.send_confirmation(ctx)
@@ -173,6 +179,7 @@ class Music(commands.Cog, name='Music'):
     @np.before_invoke
     @queue.before_invoke
     @skip.before_invoke
+    @deskip.before_invoke
     @loop.before_invoke
     @remove.before_invoke
     @clear.before_invoke
@@ -189,13 +196,11 @@ class Music(commands.Cog, name='Music'):
     @np.error
     @queue.error
     @skip.error
+    @deskip.error
     @seek.error
     @remove.error
     @clear.error
     async def error(self, ctx, exception):
-        #if isinstance(exception, youtube_dl.utils.DownloadError) or isinstance(exception, youtube_dl.utils.ExtractorError):
-        #    await ctx.send("Error: video unavailable")
-        #else:
         await ctx.send(exception)
 
 
@@ -243,20 +248,12 @@ class Player(wavelink.Player):
     spawned on bot joining voice channel 
     and destroyed on bot leaving voice channel"""
 
-    #TODO: store currently playing track in status views, send it to restart() func 
-    # WHY?
-
-    __slots__ = ("queue","statusviews","loop_track","spawn_ctx","pagesize") #TODO: populate
-
     def __init__(self, client, channel):
         super().__init__(client, channel)
 
         self.queue = PseudoQueue()
-        self.statusviews = MDHashmap()
-
         self.status_view = None
-
-        #TODO: can None items just be defined in slots?
+        self.skipped_tracks = None
         self.loop_track = None
         self.spawn_ctx = None
         self.pagesize = 10
@@ -324,16 +321,27 @@ class Player(wavelink.Player):
 
     async def skip(self, num=None):
         if not num:
+            self.skipped_tracks = [self.source]
             await self.stop()
             return True
         else:
             try:
-                self.queue.pop(int(num)-1)
+                self.skipped_tracks = [self.source] + self.queue.pop(int(num)-1)
                 await self.stop()
                 return True
             except IndexError:
                 raise("Error: please enter a valid index number")
-                
+
+
+    async def deskip(self):
+        if self.skipped_tracks:
+            self.queue.put_top(self.skipped_tracks + [self.source])
+            self.skipped_tracks = None
+            await self.stop()
+            return True
+        else:
+            return False
+
 
     async def seek(self, time):
         try:
@@ -342,10 +350,8 @@ class Player(wavelink.Player):
             else:
                 seconds = utils.general.timestr_to_secs(time)
                 seektime = seconds*1000
-
                 if seconds > self.source.duration:
                     raise ValueError
-
             await super().seek(seektime)
         except ValueError:
             raise("Error: invalid timestamp")
@@ -446,7 +452,6 @@ class Player(wavelink.Player):
 
 class ExpiringView(discord.ui.View):
     """Expiring views will disable all childen upon calling expire()"""
-    __slots__ = ("messages")
     def __init__(self, *, timeout=30):
         super().__init__(timeout=timeout)
         self.messages = []
@@ -459,14 +464,13 @@ class ExpiringView(discord.ui.View):
             item.disabled = True
         for msg in reversed(self.messages):
             await msg.edit(view=self)
-        self.messages.clear()
+        #self.messages.clear()
         self.stop()
 
 
 
 class GatedView(ExpiringView):
     """Gated views check for user permission before allowing interactions"""
-    __slots__ = ("author_id")
     def __init__(self, *, author_id=None, timeout=30):
         super().__init__(timeout=timeout)
         self.author_id = author_id
@@ -516,22 +520,13 @@ class TrackList(GatedView):
 
 
 class MusicControls(GatedView):
-    """Creates a discord.py view that adds a skip and restart button.
-
-    Attributes
-    -----------
-    restart: :class:`list`  ex: [function_name, arg1, arg2, ...]
-        A list containing the function (and arguments) to be called when the restart button is pressed
-    skip: :class:`list`  ex: [function_name, arg1, arg2, ...]
-        A list containing the function (and arguments) to be called when the skip button is pressed
-    """
-
-    __slots__ = ("vc",)
+    """Creates a discord.py view that adds a skip and restart button."""
 
     def __init__(self, vc, *, timeout = 10):
         super().__init__(timeout=timeout)
         self.vc : Player = vc
-        self.children[2].style = discord.ButtonStyle.green if vc.loop_track else discord.ButtonStyle.grey
+        self.children[1].disabled = not self.vc.skipped_tracks
+        self.children[3].style = discord.ButtonStyle.green if vc.loop_track else discord.ButtonStyle.grey
 
 
     @discord.ui.button(label='Restart', custom_id="restart", style=discord.ButtonStyle.grey)
@@ -540,6 +535,14 @@ class MusicControls(GatedView):
         self.timeout = self.vc.source.duration
         embed = await self.vc.generate_status()
         await interaction.response.edit_message(embed=embed)
+
+
+    @discord.ui.button(label='Deskip', custom_id="deskip", style=discord.ButtonStyle.grey)
+    async def deskip_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.vc.deskip()
+        button.style = discord.ButtonStyle.blurple
+        await interaction.response.edit_message(view=self)
+        await self.expire()
 
 
     @discord.ui.button(label='Skip', custom_id="skip", style=discord.ButtonStyle.grey)
@@ -575,8 +578,6 @@ class Undo(ExpiringView):
     requester_id: :class:`int`
         The id of the user who is allowed to interact with the view
     """
-
-    __slots__ = ("undo_op", "requester_id")
 
     def __init__(self, *, undo_op: list, requester_id, timeout = 30):
         super().__init__(timeout=timeout)
@@ -631,9 +632,9 @@ class PseudoQueue:
         if n:
             if not n < len(self.list):
                 raise IndexError
-            element = self.list[n]
+            elements = self.list[:n]
             self.list = self.list[n:]
-            return element
+            return elements
         else:
             element = self.list[0]
             del self.list[0]
