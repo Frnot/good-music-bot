@@ -577,7 +577,7 @@ class MusicControls(GatedView):
             self.timeout = timeout
         await interaction.response.defer()
         for msg in reversed(self.messages):
-            await msg.edit(embed=embed, view=self)
+            await msg.edit(view=self)
 
 
 
