@@ -17,7 +17,16 @@ from modules.permissions import Permissions
 log = logging.getLogger(__name__)
 
 
-#TODO: on loop, update status view's expire
+#TODO: can have the same view on multiple messages
+## will automatically update all the views
+
+
+#TODO: on loop enable, disable status view's expire
+#TODO: on lood disable, reenable status view's expire
+
+#TODO: track and update all current statuses?
+
+#TODO: expire all status views when the song changes
 #TODO: expire undo when queued one track and it gets played or removed
 
 
@@ -73,7 +82,7 @@ class Music(commands.Cog, name='Music'):
         """Streams from a url (doesn't predownload)"""
         embed, view = await ctx.voice_client.playadd(ctx, request, ctx.author, queuetop)
         if embed and view:
-            view.message = await ctx.send(embed=embed, view=view)
+            view.messages.append(await ctx.send(embed=embed, view=view))
 
 
     @commands.command()
@@ -145,7 +154,7 @@ class Music(commands.Cog, name='Music'):
     async def queue(self, ctx):
         embed, view = await ctx.voice_client.showqueue(ctx.author)
         if view:
-            view.message = await ctx.send(embed=embed, view=view)
+            view.messages.append(await ctx.send(embed=embed, view=view))
         else:
             await ctx.send(embed=embed)
 
@@ -198,7 +207,7 @@ class Music(commands.Cog, name='Music'):
             if after.channel is None or after.channel is not vc.channel: # User disconnected or left
                 # Bot was forcefully disconnected or Bot is the only user connected to the vc
                 if member.id == self.bot.user.id or not (len(vc.channel.members) > 1): 
-                    await vc.expire_views()
+                    await vc.expire_all_views()
                     await vc.disconnect()
 
 
@@ -216,6 +225,8 @@ class Music(commands.Cog, name='Music'):
         if vc.loop_track and reason == "FINISHED":
             await vc.play(vc.loop_track)
         else:
+            await vc.expire_stale_views() #TODO: put this after new track is started
+                                            # have to keep track of status views so we dont expire new track view
             if vc.loop_track:
                 vc.loop_track = None
             if not vc.queue.is_empty():
@@ -232,20 +243,20 @@ class Player(wavelink.Player):
     spawned on bot joining voice channel 
     and destroyed on bot leaving voice channel"""
 
-    #TODO: keep track of all status views while track is playing,
-        # when track ends, check if switching to new track. if so, expire all old status views
-    #TODO: store currently playing track in status views, send it to restart() func
+    #TODO: store currently playing track in status views, send it to restart() func 
+    # WHY?
 
-    __slots__ = ("test",) #TODO: populate
+    __slots__ = ("queue","statusviews","loop_track","spawn_ctx","pagesize") #TODO: populate
 
     def __init__(self, client, channel):
         super().__init__(client, channel)
 
         self.queue = PseudoQueue()
+        self.statusviews = MDHashmap()
+
+        self.status_view = None
 
         #TODO: can None items just be defined in slots?
-        self.statusview = None
-
         self.loop_track = None
         self.spawn_ctx = None
         self.pagesize = 10
@@ -356,9 +367,9 @@ class Player(wavelink.Player):
         if self.is_playing():
             embed = await self.generate_status()
             time_remaining = self.source.duration - self.position
-            view = MusicControls(self, timeout=time_remaining)
-            view.message = await response_channel.send(embed=embed, view=view)
-            self.statusview = view
+            if not self.status_view:
+                self.status_view = MusicControls(self, timeout=time_remaining)
+            self.status_view.messages.append(await response_channel.send(embed=embed, view=self.status_view))
         else:
             await response_channel.send("Nothing is playing")
 
@@ -376,8 +387,16 @@ class Player(wavelink.Player):
             return(embed, None)
 
 
-    async def expire_views(self):
-        await self.statusview.expire()
+    async def expire_stale_views(self):
+        if self.status_view:
+            await self.status_view.expire()
+            self.status_view = None
+
+
+    async def expire_all_views(self):
+        if self.status_view:
+            await self.status_view.expire()
+            self.status_view = None
 
 
     ### View ###
@@ -427,9 +446,10 @@ class Player(wavelink.Player):
 
 class ExpiringView(discord.ui.View):
     """Expiring views will disable all childen upon calling expire()"""
-    __slots__ = ("message",)
+    __slots__ = ("messages")
     def __init__(self, *, timeout=30):
         super().__init__(timeout=timeout)
+        self.messages = []
 
     async def on_timeout(self):
         await self.expire()
@@ -437,14 +457,16 @@ class ExpiringView(discord.ui.View):
     async def expire(self):
         for item in self.children:
             item.disabled = True
-        await self.message.edit(view=self)
+        for msg in reversed(self.messages):
+            await msg.edit(view=self)
+        self.messages.clear()
         self.stop()
 
 
 
 class GatedView(ExpiringView):
     """Gated views check for user permission before allowing interactions"""
-    __slots__ = ("author_id",)
+    __slots__ = ("author_id")
     def __init__(self, *, author_id=None, timeout=30):
         super().__init__(timeout=timeout)
         self.author_id = author_id
@@ -534,7 +556,9 @@ class MusicControls(GatedView):
             button.style = discord.ButtonStyle.green
         else:
             button.style = discord.ButtonStyle.grey
-        await interaction.response.edit_message(view=self)
+        await interaction.response.defer()
+        for m in reversed(self.messages):
+            await m.edit(view=self)
 
 
 
@@ -576,9 +600,29 @@ class Undo(ExpiringView):
         self.undo_op[0](self.undo_op[1])
 
 
+class MDHashmap:
+    __slots__ = ("dic")
+    def __init__(self):
+        self.dic = {}
+
+    def add(self, key, value):
+        if key in self.dic:
+            self.dic[key].append(value)
+        else:
+            self.dic[key] = [value]
+
+    def pop(self, key):
+        return self.dic.pop(key)
+    
+    def get_all(self):
+        vals = []
+        for list in self.dic.values():
+            vals.extend(list)
+        return vals
+
 
 class PseudoQueue:
-    __slots__ = ("list",)
+    __slots__ = ("list")
 
     def __init__(self):
         self.list = []
