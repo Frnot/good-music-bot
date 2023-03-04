@@ -428,13 +428,14 @@ class Player(wavelink.Player):
         if track.requester:
             embed.add_field(name="Requested by:", value=track.requester.mention, inline=False)
         if self.position == track.duration:
-            position = f"\n{utils.general.sec_to_minsec(0)} / {utils.general.sec_to_minsec(int(track.duration))}"
+            position = f"\n0:00 / {utils.general.sec_to_minsec(int(track.duration))}"
+            time_remaining = self.source.duration # track position is initialzied to duration?
         else:
             position = f"\n{utils.general.sec_to_minsec(int(self.position))} / {utils.general.sec_to_minsec(int(track.duration))}"
+            time_remaining = self.source.duration - self.position
         embed.add_field(name="Position", value=position, inline=False)
         if hasattr(track, "thumbnail"):
             embed.set_thumbnail(url=track.thumbnail)
-        time_remaining = self.source.duration - self.position
         return embed, time_remaining
 
 
