@@ -212,7 +212,6 @@ class Music(commands.Cog, name='Music'):
             if after.channel is None or after.channel is not vc.channel: # User disconnected or left
                 # Bot was forcefully disconnected or Bot is the only user connected to the vc
                 if member.id == self.bot.user.id or not (len(vc.channel.members) > 1): 
-                    await vc.expire_all_views()
                     await vc.disconnect()
 
 
@@ -290,8 +289,7 @@ class Player(wavelink.Player):
                 description = playlist.name,
                 color = utils.rng.random_color()
             )
-            view = Undo(undo_op=(self.queue.unqueue, playlist.tracks), requester_id=author.id)
-            self.misc_views.append(view)
+            view = Undo(container=self.misc_views, undo_op=(self.queue.unqueue, playlist.tracks), requester_id=author.id)
 
         else:
             track = result
@@ -306,8 +304,7 @@ class Player(wavelink.Player):
                     color = utils.rng.random_color()
                 )
                 embed.set_thumbnail(url=result.thumbnail)
-                view = Undo(undo_op=(self.queue.unqueue,[track]),requester_id=author.id)
-                self.misc_views.append(view)
+                view = Undo(container=self.misc_views, undo_op=(self.queue.unqueue,[track]),requester_id=author.id)
                 
 
         # If bot isn't playing, process queue
@@ -465,9 +462,12 @@ class Player(wavelink.Player):
 
 class ExpiringView(discord.ui.View):
     """Expiring views will disable all childen upon calling expire()"""
-    def __init__(self, *, timeout=30):
+    def __init__(self, container=None, *, timeout=30):
         super().__init__(timeout=timeout)
         self.messages = []
+        self.container = container
+        if self.container is not None:
+            self.container.append(self)
 
     async def on_timeout(self):
         await self.expire()
@@ -479,6 +479,8 @@ class ExpiringView(discord.ui.View):
             await msg.edit(view=self)
         #self.messages.clear()
         self.stop()
+        if self.container:
+            self.container.remove(self)
 
 
 
@@ -595,8 +597,8 @@ class Undo(ExpiringView):
         The id of the user who is allowed to interact with the view
     """
 
-    def __init__(self, *, undo_op: list, requester_id, timeout = 30):
-        super().__init__(timeout=timeout)
+    def __init__(self, *, container=None, undo_op: list, requester_id, timeout = 30):
+        super().__init__(container=container, timeout=timeout)
         self.undo_op = undo_op
         self.requester_id = requester_id
 
