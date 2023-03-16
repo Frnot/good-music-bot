@@ -4,6 +4,7 @@ import math
 import os
 import re
 import subprocess
+from collections import deque
 
 import discord
 import wavelink
@@ -17,16 +18,6 @@ from modules.permissions import Permissions
 log = logging.getLogger(__name__)
 
 
-#TODO: can have the same view on multiple messages
-## will automatically update all the views
-
-
-#TODO: on loop enable, disable status view's expire
-#TODO: on lood disable, reenable status view's expire
-
-#TODO: track and update all current statuses?
-
-#TODO: expire all status views when the song changes
 #TODO: expire undo when queued one track and it gets played or removed
 
 
@@ -233,8 +224,8 @@ class Music(commands.Cog, name='Music'):
                                             # have to keep track of status views so we dont expire new track view
             if vc.loop_track:
                 vc.loop_track = None
-            if not vc.queue.is_empty():
-                new_track = vc.queue.pop()
+            if vc.queue: # is not empty
+                new_track = vc.queue.popleft()
                 await vc.play(new_track)
             else:
                 vc.spawn_ctx = None
@@ -250,7 +241,7 @@ class Player(wavelink.Player):
     def __init__(self, client, channel):
         super().__init__(client, channel)
 
-        self.queue = PseudoQueue()
+        self.queue = deque()
         self.status_view = None
         self.misc_views = []
         self.skipped_tracks = None
@@ -267,7 +258,11 @@ class Player(wavelink.Player):
     ### Model ###
 
     async def playadd(self, ctx, request, author, queuetop):
-        queuetracks: function = self.queue.put_top if queuetop else self.queue.put
+        if queuetop:
+            queuetracks: function = lambda tracks : self.queue.extendleft(reversed(tracks))
+        else:
+            queuetracks: function = self.queue.extend
+
         embed = view = None
 
         if re.match(r'https?://(?:www\.)?.+', request):
@@ -289,12 +284,14 @@ class Player(wavelink.Player):
                 description = playlist.name,
                 color = utils.rng.random_color()
             )
-            view = Undo(container=self.misc_views, undo_op=(self.queue.unqueue, playlist.tracks), requester_id=author.id)
+            view = Undo(container=self.misc_views,
+                        undo_op=(lambda tracks : [self.queue.remove(track) for track in tracks], playlist.tracks),
+                        requester_id=author.id)
 
         else:
             track = result
             track.requester = author
-            queue_pos = queuetracks(track)
+            queue_pos = queuetracks([track])
 
             if self.is_playing():
                 embed = Embed(
@@ -304,13 +301,15 @@ class Player(wavelink.Player):
                     color = utils.rng.random_color()
                 )
                 embed.set_thumbnail(url=result.thumbnail)
-                view = Undo(container=self.misc_views, undo_op=(self.queue.unqueue,[track]),requester_id=author.id)
+                view = Undo(container=self.misc_views,
+                            undo_op=(lambda track : self.queue.remove(track), track),
+                            requester_id=author.id)
                 
 
         # If bot isn't playing, process queue
         if not self.is_playing() and not self.spawn_ctx:
             self.spawn_ctx = ctx
-            track = self.queue.pop()
+            track = self.queue.popleft()
             await self.play(track)
 
         return (embed, view)
@@ -318,10 +317,10 @@ class Player(wavelink.Player):
 
     async def remove(self, idx):
         try:
-            self.queue.remove(idx)
+            del self.queue[int(idx)-1]
             return True
-        except (IndexError, TypeError) as e:
-            raise("Error: please enter a valid index number")
+        except IndexError as e:
+            raise commands.CommandError("Error: please enter a valid index number")
 
 
     async def skip(self, num=None):
@@ -331,16 +330,19 @@ class Player(wavelink.Player):
             return True
         else:
             try:
-                self.skipped_tracks = [self.source] + self.queue.pop(int(num)-1)
+                self.skipped_tracks = [self.source]
+                for _ in range(int(num)-1):
+                    self.skipped_tracks.append(self.queue.popleft())
                 await self.stop()
                 return True
             except IndexError:
-                raise("Error: please enter a valid index number")
+                raise commands.CommandError("Error: please enter a valid index number")
 
 
     async def deskip(self):
         if self.skipped_tracks:
-            self.queue.put_top(self.skipped_tracks + [self.source])
+            self.queue.appendleft(self.source)
+            self.queue.extendleft(reversed(self.skipped_tracks))
             self.skipped_tracks = None
             await self.stop()
             return True
@@ -359,7 +361,7 @@ class Player(wavelink.Player):
                     raise ValueError
             await super().seek(seektime)
         except ValueError:
-            raise("Error: invalid timestamp")
+            raise commands.CommandError("Error: invalid timestamp")
 
 
     async def restart(self):
@@ -385,7 +387,7 @@ class Player(wavelink.Player):
 
 
     async def showqueue(self, requester):
-        if track_list := self.queue.show():
+        if track_list := list(self.queue):
             embeds = await self.generate_tracklists(track_list)
             view = TrackList(embeds, author_id=requester.id) if len(embeds) > 1 else None
             return(embeds[0], view)
@@ -617,78 +619,3 @@ class Undo(ExpiringView):
         button.style = discord.ButtonStyle.red
         await interaction.response.edit_message(view=self)
         self.undo_op[0](self.undo_op[1])
-
-
-class MDHashmap:
-    __slots__ = ("dic")
-    def __init__(self):
-        self.dic = {}
-
-    def add(self, key, value):
-        if key in self.dic:
-            self.dic[key].append(value)
-        else:
-            self.dic[key] = [value]
-
-    def pop(self, key):
-        return self.dic.pop(key)
-    
-    def get_all(self):
-        vals = []
-        for list in self.dic.values():
-            vals.extend(list)
-        return vals
-
-
-class PseudoQueue:
-    __slots__ = ("list")
-
-    def __init__(self):
-        self.list = []
-
-    def pop(self, n=None):
-        if n:
-            if not n < len(self.list):
-                raise IndexError
-            elements = self.list[:n]
-            self.list = self.list[n:]
-            return elements
-        else:
-            element = self.list[0]
-            del self.list[0]
-            return element
-
-    def put(self, item) -> int:
-        try: # item is iterable
-            self.list.extend(item)
-        except:
-            self.list.append(item)
-        return len(self.list)
-
-
-    def put_top(self, item) -> int:
-        try: # item is iterable
-            item.extend(self.list)
-            self.list = item
-        except:
-            self.list.insert(0, item)
-        return 1
-
-    def clear(self):
-        self.list.clear()
-
-    def remove(self, idx):
-        del self.list[int(idx)-1]
-
-    def unqueue(self, tracks):
-        for track in tracks:
-            try:
-                self.list.remove(track)
-            except ValueError:
-                pass
-
-    def show(self):
-        return self.list.copy()
-
-    def is_empty(self):
-        return not self.list

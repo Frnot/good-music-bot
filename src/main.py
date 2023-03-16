@@ -49,7 +49,7 @@ while attempts > 0:
 
         # If shutting down because of restart, execute main with the same arguments
         if admin_commands.restart:
-            print("Restarting code")
+            print("Restarting...")
 
             if sys.platform.startswith('linux'):
                 argv = [sys.executable, __file__] + sys.argv[1:]
