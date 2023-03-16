@@ -18,8 +18,6 @@ from modules.permissions import Permissions
 log = logging.getLogger(__name__)
 
 
-#TODO: expire undo when queued one track and it gets played or removed
-
 
 class Music(commands.Cog, name='Music'):
     def __init__(self, bot):
@@ -36,7 +34,7 @@ class Music(commands.Cog, name='Music'):
 
 
     async def connect_nodes(self):
-        """Connect to our Lavalink nodes."""
+        """Connect to the Lavalink nodes."""
         await self.bot.wait_until_ready()
 
         log.debug("Attempting to connect to Lavalink Server")
@@ -50,7 +48,7 @@ class Music(commands.Cog, name='Music'):
 
             if result.is_connected():
                 break
-            log.debug("connection failed. reattempting...")
+            log.debug("Connection failed. Reattempting...")
             await asyncio.sleep(0.5)
             connection_attempt += 1
         else:
@@ -84,59 +82,50 @@ class Music(commands.Cog, name='Music'):
 
     @commands.command()
     async def remove(self, ctx, idx):
+        """Removes a song from queue based on index (1-based)"""
         if await ctx.voice_client.remove(idx):
             await utils.general.send_confirmation(ctx)
 
 
     @commands.command()
     async def clear(self, ctx):
+        """Clears all tracks from queue"""
         ctx.voice_client.queue.clear()
         await utils.general.send_confirmation(ctx)
 
 
     @commands.command()
     async def skip(self, ctx, num=None):
+        """Skip [num] tracks in queue.
+        Will only skip current playing track by default"""
         if await ctx.voice_client.skip(num):
             await utils.general.send_confirmation(ctx)
 
 
     @commands.command()
     async def deskip(self, ctx):
+        """Undoes the last skip operation"""
         if await ctx.voice_client.deskip():
             await utils.general.send_confirmation(ctx)
 
 
     @commands.command()
     async def seek(self, ctx, time):
+        """Seeks to time in current track. mm:ss format"""
         await ctx.voice_client.seek(time)
         await utils.general.send_confirmation(ctx)
 
 
     @commands.command()
     async def restart(self, ctx):
+        """Restarts the current track"""
         await ctx.voice_client.restart()
         await utils.general.send_confirmation(ctx)
-
-    
-    @commands.command()
-    async def loop(self, ctx):
-        if track := await ctx.voice_client.loop():
-            embed = Embed(
-                title = f"Looping Track",
-                description = f"[{track.title}]({track.uri})\n",
-                color = utils.rng.random_color()
-            )
-            embed.add_field(name="Requested by:", value=ctx.author.mention)
-            if hasattr(track, "thumbnail"):
-                embed.set_thumbnail(url=track.thumbnail)
-            await ctx.send(embed=embed)
-        else:
-            await ctx.send("Disabled loop mode")
 
 
     @commands.command()
     async def stop(self, ctx):
-        """Stops and disconnects the bot from voice"""
+        """Stops and disconnects the bot from voice channel"""
         await ctx.voice_client.disconnect()
         await utils.general.send_confirmation(ctx)
 
@@ -149,6 +138,7 @@ class Music(commands.Cog, name='Music'):
 
     @commands.command()
     async def queue(self, ctx):
+        """Shows all tracks that have been queued"""
         embed, view = await ctx.voice_client.showqueue(ctx.author)
         if view:
             view.messages.append(await ctx.send(embed=embed, view=view))
@@ -171,7 +161,6 @@ class Music(commands.Cog, name='Music'):
     @queue.before_invoke
     @skip.before_invoke
     @deskip.before_invoke
-    @loop.before_invoke
     @remove.before_invoke
     @clear.before_invoke
     @seek.before_invoke
@@ -204,6 +193,7 @@ class Music(commands.Cog, name='Music'):
                 # Bot was forcefully disconnected or Bot is the only user connected to the vc
                 if member.id == self.bot.user.id or not (len(vc.channel.members) > 1): 
                     await vc.disconnect()
+                    await vc.expire_all_views()
 
 
     @commands.Cog.listener()
@@ -220,7 +210,7 @@ class Music(commands.Cog, name='Music'):
         if vc.loop_track and reason == "FINISHED":
             await vc.play(vc.loop_track)
         else:
-            await vc.expire_stale_views() #TODO: put this after new track is started
+            await vc.expire_stale_views() #TODO: put this after new track is started (for ratelimit)
                                             # have to keep track of status views so we dont expire new track view
             if vc.loop_track:
                 vc.loop_track = None
@@ -230,6 +220,7 @@ class Music(commands.Cog, name='Music'):
             else:
                 vc.spawn_ctx = None
                 await vc.stop()
+                await vc.expire_all_views()
 
 
 
