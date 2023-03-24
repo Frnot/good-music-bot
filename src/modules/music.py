@@ -40,13 +40,11 @@ class Music(commands.Cog, name='Music'):
         log.debug("Attempting to connect to Lavalink Server")
         connection_attempt = 1
         while connection_attempt < 5:
-            result = await wavelink.NodePool.create_node(
-                bot = self.bot,
-                host = "localhost",
-                port = 2333,
-                password = os.getenv("Lavalink_Password") )
+            node: wavelink.Node = wavelink.Node(uri='http://localhost:2333', password=os.getenv("Lavalink_Password"))
+            result = await wavelink.NodePool.connect(client=self.bot, nodes=[node])
 
-            if result.is_connected():
+
+            if result[0].is_connected():
                 break
             log.debug("Connection failed. Reattempting...")
             await asyncio.sleep(0.5)
@@ -58,7 +56,7 @@ class Music(commands.Cog, name='Music'):
     @commands.Cog.listener()
     async def on_wavelink_node_ready(self, node: wavelink.Node):
         """Event fired when a node has finished connecting."""
-        log.info(f'Lavalink Node: <{node.identifier}> is ready!')
+        log.info(f'Lavalink Node: <{node.id}> is ready!')
 
 
     ####################
@@ -90,7 +88,7 @@ class Music(commands.Cog, name='Music'):
     @commands.command()
     async def clear(self, ctx):
         """Clears all tracks from queue"""
-        ctx.voice_client.queue.clear()
+        ctx.voice_client.dequeue.clear()
         await utils.general.send_confirmation(ctx)
 
 
@@ -183,7 +181,6 @@ class Music(commands.Cog, name='Music'):
     async def error(self, ctx, exception):
         await ctx.send(exception)
 
-
     
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
@@ -197,25 +194,27 @@ class Music(commands.Cog, name='Music'):
 
 
     @commands.Cog.listener()
-    async def on_wavelink_track_start(self, vc, track):
-        if vc.loop_track and track.id == vc.loop_track.id:
+    async def on_wavelink_track_start(self, payload):
+        vc = payload.player
+        if vc.loop_track and payload.track.identifier == vc.loop_track.identifier:
             pass
         else:
             await vc.status(vc.spawn_ctx.channel)
 
 
     @commands.Cog.listener()
-    async def on_wavelink_track_end(self, vc, track, reason):
+    async def on_wavelink_track_end(self, payload):
+        vc = payload.player
         # track doesn't have requester attribute, have to use vc.loop_track
-        if vc.loop_track and reason == "FINISHED":
+        if vc.loop_track and payload.reason == "FINISHED":
             await vc.play(vc.loop_track)
         else:
             await vc.expire_stale_views() #TODO: put this after new track is started (for ratelimit)
                                             # have to keep track of status views so we dont expire new track view
             if vc.loop_track:
                 vc.loop_track = None
-            if vc.queue: # is not empty
-                new_track = vc.queue.popleft()
+            if vc.dequeue: # is not empty
+                new_track = vc.dequeue.popleft()
                 await vc.play(new_track)
             else:
                 vc.spawn_ctx = None
@@ -232,7 +231,7 @@ class Player(wavelink.Player):
     def __init__(self, client, channel):
         super().__init__(client, channel)
 
-        self.queue = deque()
+        self.dequeue = deque()
         self.status_view = None
         self.misc_views = []
         self.skipped_tracks = None
@@ -250,19 +249,19 @@ class Player(wavelink.Player):
 
     async def playadd(self, ctx, request, author, queuetop):
         if queuetop:
-            queuetracks: function = lambda tracks : self.queue.extendleft(reversed(tracks))
+            queuetracks: function = lambda tracks : self.dequeue.extendleft(reversed(tracks))
         else:
-            queuetracks: function = self.queue.extend
+            queuetracks: function = self.dequeue.extend
 
         embed = view = None
 
         if re.match(r'https?://(?:www\.)?.+', request):
             try:
-                result = await self.node.get_playlist(identifier=request, cls=wavelink.YouTubePlaylist)
-            except wavelink.LavalinkException:
-                result = (await self.node.get_tracks(query=request, cls=wavelink.YouTubeTrack))[0]
+                result = await self.current_node.get_playlist(query=request, cls=wavelink.YouTubePlaylist)
+            except wavelink.WavelinkException:
+                result = (await self.current_node.get_tracks(query=request, cls=wavelink.YouTubeTrack))[0]
         else:
-            result = (await self.node.get_tracks(query=f"ytsearch:{request}", cls=wavelink.YouTubeTrack))[0]
+            result = (await self.current_node.get_tracks(query=f"ytsearch:{request}", cls=wavelink.YouTubeTrack))[0]
 
         if isinstance(result, wavelink.YouTubePlaylist):
             playlist = result
@@ -276,7 +275,7 @@ class Player(wavelink.Player):
                 color = utils.rng.random_color()
             )
             view = Undo(container=self.misc_views,
-                        undo_op=(lambda tracks : [self.queue.remove(track) for track in tracks], playlist.tracks),
+                        undo_op=(lambda tracks : [self.dequeue.remove(track) for track in tracks], playlist.tracks),
                         requester_id=author.id)
 
         else:
@@ -293,14 +292,14 @@ class Player(wavelink.Player):
                 )
                 embed.set_thumbnail(url=result.thumbnail)
                 view = Undo(container=self.misc_views,
-                            undo_op=(lambda track : self.queue.remove(track), track),
+                            undo_op=(lambda track : self.dequeue.remove(track), track),
                             requester_id=author.id)
                 
 
         # If bot isn't playing, process queue
         if not self.is_playing() and not self.spawn_ctx:
             self.spawn_ctx = ctx
-            track = self.queue.popleft()
+            track = self.dequeue.popleft()
             await self.play(track)
 
         return (embed, view)
@@ -308,7 +307,7 @@ class Player(wavelink.Player):
 
     async def remove(self, idx):
         try:
-            del self.queue[int(idx)-1]
+            del self.dequeue[int(idx)-1]
             return True
         except IndexError as e:
             raise commands.CommandError("Error: please enter a valid index number")
@@ -316,14 +315,14 @@ class Player(wavelink.Player):
 
     async def skip(self, num=None):
         if not num:
-            self.skipped_tracks = [self.source]
+            self.skipped_tracks = [self.current]
             await self.stop()
             return True
         else:
             try:
-                self.skipped_tracks = [self.source]
+                self.skipped_tracks = [self.current]
                 for _ in range(int(num)-1):
-                    self.skipped_tracks.append(self.queue.popleft())
+                    self.skipped_tracks.append(self.dequeue.popleft())
                 await self.stop()
                 return True
             except IndexError:
@@ -332,8 +331,8 @@ class Player(wavelink.Player):
 
     async def deskip(self):
         if self.skipped_tracks:
-            self.queue.appendleft(self.source)
-            self.queue.extendleft(reversed(self.skipped_tracks))
+            self.dequeue.appendleft(self.current)
+            self.dequeue.extendleft(reversed(self.skipped_tracks))
             self.skipped_tracks = None
             await self.stop()
             return True
@@ -348,7 +347,7 @@ class Player(wavelink.Player):
             else:
                 seconds = utils.general.timestr_to_secs(time)
                 seektime = seconds*1000
-                if seconds > self.source.duration:
+                if seconds > self.current.duration:
                     raise ValueError
             await super().seek(seektime)
         except ValueError:
@@ -363,7 +362,7 @@ class Player(wavelink.Player):
         if self.loop_track:
             self.loop_track = None
         else:
-            self.loop_track = track = self.source
+            self.loop_track = track = self.current
         return self.loop_track
 
 
@@ -378,7 +377,7 @@ class Player(wavelink.Player):
 
 
     async def showqueue(self, requester):
-        if track_list := list(self.queue):
+        if track_list := list(self.dequeue):
             embeds = await self.generate_tracklists(track_list)
             view = TrackList(embeds, author_id=requester.id) if len(embeds) > 1 else None
             return(embeds[0], view)
@@ -409,7 +408,7 @@ class Player(wavelink.Player):
     ### View ###
 
     async def generate_status(self) -> discord.Embed:
-        track = self.source
+        track = self.current
         embed = Embed(
             title = f"Now Playing",
             description = f"[{track.title}]({track.uri})\n",
@@ -417,12 +416,12 @@ class Player(wavelink.Player):
         )
         if track.requester:
             embed.add_field(name="Requested by:", value=track.requester.mention, inline=False)
-        if self.position == track.duration:
-            position = f"\n0:00 / {utils.general.sec_to_minsec(int(track.duration))}"
-            time_remaining = self.source.duration # track position is initialzied to duration?
+        if (player_position := self.position/1000) == (track_duration := track.duration/1000):
+            position = f"\n0:00 / {utils.general.sec_to_minsec(int(track_duration))}"
+            time_remaining = track_duration # track position is initialzied to duration?
         else:
-            position = f"\n{utils.general.sec_to_minsec(int(self.position))} / {utils.general.sec_to_minsec(int(track.duration))}"
-            time_remaining = self.source.duration - self.position
+            position = f"\n{utils.general.sec_to_minsec(int(player_position))} / {utils.general.sec_to_minsec(int(track_duration))}"
+            time_remaining = track_duration - player_position
         embed.add_field(name="Position", value=position, inline=False)
         if hasattr(track, "thumbnail"):
             embed.set_thumbnail(url=track.thumbnail)
@@ -540,8 +539,8 @@ class MusicControls(GatedView):
     @discord.ui.button(label='Restart', custom_id="restart", style=discord.ButtonStyle.grey)
     async def restart_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.vc.restart()
-        self.timeout = self.vc.source.duration
-        embed = await self.vc.generate_status()
+        self.timeout = self.vc.current.duration
+        embed, time_remaining = await self.vc.generate_status()
         await interaction.response.edit_message(embed=embed)
 
 
