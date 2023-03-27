@@ -120,6 +120,13 @@ class Music(commands.Cog, name='Music'):
         await ctx.voice_client.restart()
         await utils.general.send_confirmation(ctx)
 
+    
+    @commands.command()
+    async def replay(self, ctx):
+        """Replays the song that just played"""
+        await ctx.voice_client.replay(ctx)
+        await utils.general.send_confirmation(ctx)
+
 
     @commands.command()
     async def stop(self, ctx):
@@ -163,6 +170,7 @@ class Music(commands.Cog, name='Music'):
     @clear.before_invoke
     @seek.before_invoke
     @restart.before_invoke
+    @replay.before_invoke
     @stop.before_invoke
     async def check_voice(self, ctx):
         if ctx.voice_client is None:
@@ -177,6 +185,8 @@ class Music(commands.Cog, name='Music'):
     @deskip.error
     @seek.error
     @remove.error
+    @restart.before_invoke
+    @replay.before_invoke
     @clear.error
     async def error(self, ctx, exception):
         await ctx.send(exception)
@@ -208,6 +218,7 @@ class Music(commands.Cog, name='Music'):
         # track doesn't have requester attribute, have to use vc.loop_track
         if vc.loop_track and payload.reason == "FINISHED":
             await vc.play(vc.loop_track)
+            vc.last_track = new_track
         else:
             await vc.expire_stale_views() #TODO: put this after new track is started (for ratelimit)
                                             # have to keep track of status views so we dont expire new track view
@@ -216,6 +227,7 @@ class Music(commands.Cog, name='Music'):
             if vc.dequeue: # is not empty
                 new_track = vc.dequeue.popleft()
                 await vc.play(new_track)
+                vc.last_track = new_track
             else:
                 vc.spawn_ctx = None
                 await vc.stop()
@@ -236,6 +248,7 @@ class Player(wavelink.Player):
         self.misc_views = []
         self.skipped_tracks = None
         self.loop_track = None
+        self.last_track = None
         self.spawn_ctx = None
         self.pagesize = 10
 
@@ -301,6 +314,7 @@ class Player(wavelink.Player):
             self.spawn_ctx = ctx
             track = self.dequeue.popleft()
             await self.play(track)
+            self.last_track = track
 
         return (embed, view)
 
@@ -356,6 +370,14 @@ class Player(wavelink.Player):
 
     async def restart(self):
         await self.seek(0)
+
+    
+    async def replay(self, ctx):
+        if not self.is_playing() and self.last_track:
+            self.spawn_ctx = ctx
+            await self.play(self.last_track)
+        else:
+            await ctx.send("nah i dont really feel like it")
 
 
     async def loop(self):
