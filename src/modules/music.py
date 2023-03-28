@@ -38,19 +38,8 @@ class Music(commands.Cog, name='Music'):
         await self.bot.wait_until_ready()
 
         log.debug("Attempting to connect to Lavalink Server")
-        connection_attempt = 1
-        while connection_attempt < 5:
-            node: wavelink.Node = wavelink.Node(uri='http://localhost:2333', password=os.getenv("Lavalink_Password"))
-            result = await wavelink.NodePool.connect(client=self.bot, nodes=[node])
-
-
-            if result[0].is_connected():
-                break
-            log.debug("Connection failed. Reattempting...")
-            await asyncio.sleep(0.5)
-            connection_attempt += 1
-        else:
-            log.error("Failed to connect to Lavalink server")
+        node: wavelink.Node = wavelink.Node(uri='http://localhost:2333', password=os.getenv("Lavalink_Password"))
+        await wavelink.NodePool.connect(client=self.bot, nodes=[node])
 
 
     @commands.Cog.listener()
@@ -205,7 +194,7 @@ class Music(commands.Cog, name='Music'):
 
     @commands.Cog.listener()
     async def on_wavelink_track_start(self, payload):
-        vc = payload.player
+        vc: Player = payload.player
         if vc.loop_track and payload.track.identifier == vc.loop_track.identifier:
             pass
         else:
@@ -374,7 +363,6 @@ class Player(wavelink.Player):
     
     async def replay(self, ctx):
         if not self.is_playing() and self.last_track:
-            self.spawn_ctx = ctx
             await self.play(self.last_track)
         else:
             await ctx.send("nah i dont really feel like it")
