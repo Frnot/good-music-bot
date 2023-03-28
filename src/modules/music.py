@@ -183,7 +183,6 @@ class Music(commands.Cog, name='Music'):
     
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-        # TODO: check if everyone else is a bot
         """Disconnects bot from voice channel if no users are connected and clears queue if bot is disconnected"""
         if vc := member.guild.voice_client: # Bot is connected to vc
             if before.channel and before.channel is vc.channel: # If user was in bot's channel
@@ -378,7 +377,7 @@ class Player(wavelink.Player):
 
 
     async def status(self, response_channel=None, skip_check=False):
-        #await response_channel.send(f"Is playing?: {self.is_playing()} | has current track? {self.current is not None}")
+        await response_channel.send(f"Is playing?: {self.is_playing()} | has current track? {self.current is not None}")
         if self.is_playing() or skip_check:
             embed, time_remaining = await self.generate_status()
             if not self.status_view:
