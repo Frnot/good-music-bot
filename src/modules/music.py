@@ -198,7 +198,8 @@ class Music(commands.Cog, name='Music'):
         if vc.loop_track and payload.track.identifier == vc.loop_track.identifier:
             pass
         else:
-            await vc.status(vc.spawn_ctx.channel, skip_check=True)
+            asyncio.sleep(0.1)
+            await vc.status(vc.spawn_ctx.channel)
 
 
     @commands.Cog.listener()
@@ -377,8 +378,7 @@ class Player(wavelink.Player):
 
 
     async def status(self, response_channel=None, skip_check=False):
-        await response_channel.send(f"Is playing?: {self.is_playing()} | has current track? {self.current is not None}")
-        if self.is_playing() or skip_check:
+        if self.is_playing():
             embed, time_remaining = await self.generate_status()
             if not self.status_view:
                 self.status_view = MusicControls(self, timeout=time_remaining)
