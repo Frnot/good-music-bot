@@ -55,7 +55,7 @@ class Music(commands.Cog, name='Music'):
 
     @commands.command()
     async def play(self, ctx, *, request, queuetop=False):
-        """Streams from a url (doesn't predownload)"""
+        """Plays a track from a url or performs a query for request on youtube"""
         embed, view = await ctx.voice_client.playadd(ctx, request, ctx.author, queuetop)
         if embed and view:
             view.messages.append(await ctx.send(embed=embed, view=view))
@@ -146,7 +146,6 @@ class Music(commands.Cog, name='Music'):
         if ctx.voice_client is None:
             if ctx.author.voice:
                 await ctx.author.voice.channel.connect(cls=Player)
-                discord.VoiceChannel.connect
             else:
                 raise commands.CommandError("You are not connected to a voice channel.")
 
