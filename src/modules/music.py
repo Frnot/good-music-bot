@@ -112,8 +112,8 @@ class Music(commands.Cog, name='Music'):
     
     @commands.command()
     async def replay(self, ctx):
-        """Replays the song that just played"""
-        await ctx.voice_client.replay()
+        """Plays the last track that played before bot stopped playing music"""
+        await ctx.voice_client.replay(ctx)
 
 
     @commands.command()
@@ -359,8 +359,9 @@ class Player(wavelink.Player):
         await self.seek(0)
 
     
-    async def replay(self):
-        if not self.is_playing() and self.last_track:
+    async def replay(self, ctx):
+        if not self.is_playing() and not self.spawn_ctx and self.last_track:
+            self.spawn_ctx = ctx
             await self.play(self.last_track)
             return True
 
