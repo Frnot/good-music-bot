@@ -177,7 +177,7 @@ class Music(commands.Cog, name='Music'):
     @clear.error
     async def error(self, ctx, exception):
         await ctx.send(exception)
-
+    
     
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
@@ -215,7 +215,7 @@ class Music(commands.Cog, name='Music'):
                 new_track = vc.dequeue.popleft()
                 await vc.play(new_track)
             else:
-                await vc.stop()
+                vc.spawn_ctx = None
                 await vc.expire_all_views()
 
 
