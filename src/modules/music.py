@@ -113,8 +113,7 @@ class Music(commands.Cog, name='Music'):
     @commands.command()
     async def replay(self, ctx):
         """Replays the song that just played"""
-        if await ctx.voice_client.replay():
-            await utils.general.send_confirmation(ctx)
+        await ctx.voice_client.replay()
 
 
     @commands.command()
