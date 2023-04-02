@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "good_music_bot"
-version = "2.10.5"
+version = "2.11.0"
 description = "A discord music bot powered by discord.py and Wavelink"
 readme = "README.md"
 
@@ -13,5 +13,5 @@ dependencies = [
     "discord.py >= 2.0.1",
     "python-dotenv",
     "aiosqlite",
-    "Wavelink >= 2.1.0",
+    "Wavelink >= 2.2.0",
 ]

@@ -113,8 +113,8 @@ class Music(commands.Cog, name='Music'):
     @commands.command()
     async def replay(self, ctx):
         """Replays the song that just played"""
-        await ctx.voice_client.replay(ctx)
-        await utils.general.send_confirmation(ctx)
+        if await ctx.voice_client.replay():
+            await utils.general.send_confirmation(ctx)
 
 
     @commands.command()
@@ -173,8 +173,8 @@ class Music(commands.Cog, name='Music'):
     @deskip.error
     @seek.error
     @remove.error
-    @restart.before_invoke
-    @replay.before_invoke
+    @restart.error
+    @replay.error
     @clear.error
     async def error(self, ctx, exception):
         await ctx.send(exception)
@@ -194,31 +194,28 @@ class Music(commands.Cog, name='Music'):
     @commands.Cog.listener()
     async def on_wavelink_track_start(self, payload):
         vc: Player = payload.player
-        if vc.loop_track and payload.track.identifier == vc.loop_track.identifier:
-            pass
-        else:
-            asyncio.sleep(0.1)
+        if not vc.loop_track:
             await vc.status(vc.spawn_ctx.channel)
 
 
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, payload):
         vc = payload.player
-        # track doesn't have requester attribute, have to use vc.loop_track
-        if vc.loop_track and payload.reason == "FINISHED":
-            await vc.play(vc.loop_track)
-            vc.last_track = new_track
+        track = payload.original
+        vc.last_track = track
+
+        if payload.reason == "FINISHED":
+            vc.skipped_tracks = None
+
+        if vc.loop_track:
+            await vc.play(track)
         else:
             await vc.expire_stale_views() #TODO: put this after new track is started (for ratelimit)
                                             # have to keep track of status views so we dont expire new track view
-            if vc.loop_track:
-                vc.loop_track = None
             if vc.dequeue: # is not empty
                 new_track = vc.dequeue.popleft()
                 await vc.play(new_track)
-                vc.last_track = new_track
             else:
-                vc.spawn_ctx = None
                 await vc.stop()
                 await vc.expire_all_views()
 
@@ -236,7 +233,7 @@ class Player(wavelink.Player):
         self.status_view = None
         self.misc_views = []
         self.skipped_tracks = None
-        self.loop_track = None
+        self.loop_track = False
         self.last_track = None
         self.spawn_ctx = None
         self.pagesize = 10
@@ -317,6 +314,7 @@ class Player(wavelink.Player):
 
 
     async def skip(self, num=None):
+        self.loop_track = False
         if not num:
             self.skipped_tracks = [self.current]
             await self.stop()
@@ -333,6 +331,7 @@ class Player(wavelink.Player):
 
 
     async def deskip(self):
+        self.loop_track = False
         if self.skipped_tracks:
             self.dequeue.appendleft(self.current)
             self.dequeue.extendleft(reversed(self.skipped_tracks))
@@ -361,18 +360,14 @@ class Player(wavelink.Player):
         await self.seek(0)
 
     
-    async def replay(self, ctx):
+    async def replay(self):
         if not self.is_playing() and self.last_track:
             await self.play(self.last_track)
-        else:
-            await ctx.send("nah i dont really feel like it")
+            return True
 
 
     async def loop(self):
-        if self.loop_track:
-            self.loop_track = None
-        else:
-            self.loop_track = track = self.current
+        self.loop_track = not self.loop_track
         return self.loop_track
 
 
