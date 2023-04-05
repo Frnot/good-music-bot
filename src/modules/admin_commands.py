@@ -72,7 +72,7 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
 
     @commands.command()
     @commands.is_owner()
-    async def undie(self, ctx):
+    async def reload(self, ctx):
         """Restart the bot without updating"""
         global restart
         restart = True
