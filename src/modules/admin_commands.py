@@ -72,6 +72,17 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
 
     @commands.command()
     @commands.is_owner()
+    async def undie(self, ctx):
+        """Restart the bot without updating"""
+        global restart
+        restart = True
+        log.info("Restarting")
+        await utils.general.send_confirmation(ctx)
+        await ctx.bot.close()
+    
+
+    @commands.command()
+    @commands.is_owner()
     async def update(self, ctx):
         """Install updates from git"""
         global restart
@@ -128,6 +139,7 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
     @leave.error
     @servers.error
     @die.error
+    @undie.error
     @update.error
     @status.error
     async def error(self, ctx, exception):
