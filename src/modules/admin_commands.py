@@ -139,7 +139,7 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
     @leave.error
     @servers.error
     @die.error
-    @undie.error
+    @reload.error
     @update.error
     @status.error
     async def error(self, ctx, exception):
