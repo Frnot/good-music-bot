@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import math
 import os
@@ -65,6 +64,12 @@ class Music(commands.Cog, name='Music'):
     async def playnext(self, ctx, *, request):
         """Adds song to top of play queue"""
         await self.play(ctx, request=request, queuetop=True)
+
+
+    @commands.command()
+    async def join(self, ctx):
+        """Joins voice chat (and nothing else)"""
+        pass
 
 
     @commands.command()
@@ -141,31 +146,40 @@ class Music(commands.Cog, name='Music'):
 
     @play.before_invoke
     @playnext.before_invoke
+    @join.before_invoke
     async def ensure_voice(self, ctx):
         if ctx.voice_client is None:
             if ctx.author.voice:
                 await ctx.author.voice.channel.connect(cls=Player)
             else:
-                raise commands.CommandError("You are not connected to a voice channel.")
+                raise commands.CheckFailure("You are not connected to a voice channel.")
 
 
-    @np.before_invoke
     @queue.before_invoke
-    @skip.before_invoke
     @deskip.before_invoke
     @remove.before_invoke
     @clear.before_invoke
-    @seek.before_invoke
-    @restart.before_invoke
     @replay.before_invoke
     @stop.before_invoke
     async def check_voice(self, ctx):
         if ctx.voice_client is None:
-            raise commands.CommandError("Bot is not connected to a voice channel.")
+            raise commands.CheckFailure("Bot is not connected to a voice channel.")
+
+
+    @skip.before_invoke
+    @seek.before_invoke
+    @restart.before_invoke
+    @np.before_invoke
+    async def check_playing(self, ctx):
+        if ctx.voice_client is None:
+            raise commands.CheckFailure("Bot is not connected to a voice channel.")
+        if not ctx.voice_client.is_playing():
+            raise commands.CheckFailure("Nothing is playing")
 
 
     @play.error
     @playnext.error
+    @join.error
     @np.error
     @queue.error
     @skip.error
@@ -176,7 +190,10 @@ class Music(commands.Cog, name='Music'):
     @replay.error
     @clear.error
     async def error(self, ctx, exception):
-        await ctx.send(exception)
+        if isinstance(exception, commands.CheckFailure):
+            await ctx.send(exception)
+        else:
+            log.exception(exception)
     
     
     @commands.Cog.listener()
@@ -246,23 +263,22 @@ class Player(wavelink.Player):
     ### Model ###
 
     async def playadd(self, ctx, request, author, queuetop):
+        embed = view = playlist = track = None
+        
         if queuetop:
             queuetracks: function = lambda tracks : self.dequeue.extendleft(reversed(tracks))
         else:
             queuetracks: function = self.dequeue.extend
 
-        embed = view = None
-
         if re.match(r'https?://(?:www\.)?.+', request):
             try:
-                result = await self.current_node.get_playlist(query=request, cls=wavelink.YouTubePlaylist)
+                playlist = await self.current_node.get_playlist(query=request, cls=wavelink.YouTubePlaylist)
             except wavelink.WavelinkException:
-                result = (await self.current_node.get_tracks(query=request, cls=wavelink.YouTubeTrack))[0]
+                track = (await self.current_node.get_tracks(query=request, cls=wavelink.YouTubeTrack))[0]
         else:
-            result = (await self.current_node.get_tracks(query=f"ytsearch:{request}", cls=wavelink.YouTubeTrack))[0]
+            track = (await self.current_node.get_tracks(query=f"ytsearch:{request}", cls=wavelink.YouTubeTrack))[0]
 
-        if isinstance(result, wavelink.YouTubePlaylist):
-            playlist = result
+        if playlist:
             for track in playlist.tracks:
                 track.requester = author 
             queuetracks(playlist.tracks)
@@ -277,7 +293,6 @@ class Player(wavelink.Player):
                         requester_id=author.id)
 
         else:
-            track = result
             track.requester = author
             queue_pos = queuetracks([track])
 
@@ -288,7 +303,7 @@ class Player(wavelink.Player):
                     url = track.uri,
                     color = utils.rng.random_color()
                 )
-                embed.set_thumbnail(url=result.thumbnail)
+                embed.set_thumbnail(url=track.thumbnail)
                 view = Undo(container=self.misc_views,
                             undo_op=(lambda track : self.dequeue.remove(track), track),
                             requester_id=author.id)
@@ -371,14 +386,11 @@ class Player(wavelink.Player):
         return self.loop_track
 
 
-    async def status(self, response_channel=None, skip_check=False):
-        if self.is_playing():
-            embed, time_remaining = await self.generate_status()
-            if not self.status_view:
-                self.status_view = MusicControls(self, timeout=time_remaining)
-            self.status_view.messages.append(await response_channel.send(embed=embed, view=self.status_view))
-        else:
-            await response_channel.send("Nothing is playing")
+    async def status(self, response_channel=None):
+        embed, time_remaining = await self.generate_status()
+        if not self.status_view:
+            self.status_view = MusicControls(self, timeout=time_remaining)
+        self.status_view.messages.append(await response_channel.send(embed=embed, view=self.status_view))
 
 
     async def showqueue(self, requester):
