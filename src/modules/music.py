@@ -48,8 +48,13 @@ class Music(commands.Cog, name='Music'):
 
     
     async def cog_unload(self):
-        log.info("Attempting to kill Lavalink process")
+        log.info("Attempting to stop Lavalink process")
         self.lavalink_proc.terminate()
+        try:
+            self.lavalink_proc.wait(timeout=1)
+        except subprocess.TimeoutError:
+            log.info("SIGTERM failed. sending SIGKILL")
+            self.lavalink_proc.kill()
 
 
     ####################
