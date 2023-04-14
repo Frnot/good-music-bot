@@ -24,8 +24,8 @@ class Music(commands.Cog, name='Music'):
 
         # Start Lavalink
         log.info("Starting Lavalink Server")
-        #TODO: (noncritical) dont try to reopen on update
-        subprocess.Popen(["java", "-jar", "Lavalink.jar"], cwd="Lavalink")
+        # If you don't like this, I probably didn't ask.
+        self.lavalink_proc = subprocess.Popen(["java", "-jar", "Lavalink.jar"], cwd="Lavalink")
         # Connect to Lavalink
         bot.loop.create_task(self.connect_nodes())
 
@@ -45,6 +45,11 @@ class Music(commands.Cog, name='Music'):
     async def on_wavelink_node_ready(self, node: wavelink.Node):
         """Event fired when a node has finished connecting."""
         log.info(f'Lavalink Node: <{node.id}> is ready!')
+
+    
+    async def cog_unload(self):
+        log.info("Attempting to kill Lavalink process")
+        self.lavalink_proc.terminate()
 
 
     ####################
