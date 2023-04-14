@@ -90,7 +90,7 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
 
         async with ctx.channel.typing():
             await ctx.send("Updating...")
-            self.status(ctx, "streaming", "update")
+            await self.status(ctx, "streaming", "update")
             log.info("Running Updates")
 
             log.debug("executing command: git stash")
