@@ -23,7 +23,7 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
     @commands.is_owner()
     async def invite(self, ctx):
         """Generate invite link for bot"""
-        permissions = discord.Permissions(1089579515889)
+        permissions = discord.Permissions(1099243192305)
         invite_link = discord.utils.oauth_url(self.bot.user.id, permissions=permissions)
         log.info(f"Recieved invite command in guild {ctx.guild.name}")
         await ctx.send(invite_link)
