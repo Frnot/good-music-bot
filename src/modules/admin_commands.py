@@ -15,7 +15,7 @@ restart = False
 
 class AdminCommands(commands.Cog, name='Admin Commands'):
     def __init__(self, bot):
-        self.bot = bot
+        self.bot: commands.bot = bot
         log.info(f"Registered Cog: {self.qualified_name}")
 
 
@@ -59,6 +59,10 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
         )
         await ctx.send(embed=embed)
 
+    @commands.command()
+    @commands.is_owner()
+    async def perms(self, ctx):
+        await ctx.send(ctx.bot_permissions.value)
 
     # Shutdown
     @commands.command()
