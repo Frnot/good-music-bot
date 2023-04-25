@@ -70,7 +70,7 @@ class Permissions(commands.Cog, name='Permissions'):
 
 
     @classmethod
-    async def query_banlist(self, id):
+    async def query_banlist(cls, id):
         try:
             if await db.select("user_id", "banlist", "user_id", id) is not None:
                 return True

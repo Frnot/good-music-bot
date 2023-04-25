@@ -7,6 +7,7 @@ import discord.utils
 from discord import Embed
 from discord.ext import commands
 
+import bot_main
 import utils.general
 
 log = logging.getLogger(__name__)
@@ -15,7 +16,7 @@ restart = False
 
 class AdminCommands(commands.Cog, name='Admin Commands'):
     def __init__(self, bot):
-        self.bot: commands.bot = bot
+        self.bot: bot_main.Bot = bot
         log.info(f"Registered Cog: {self.qualified_name}")
 
 
@@ -132,6 +133,8 @@ class AdminCommands(commands.Cog, name='Admin Commands'):
             actiontype = discord.ActivityType.watching
         elif action in ("competing", "competing in"):
             actiontype = discord.ActivityType.competing
+        else:
+            actiontype = discord.ActivityType.playing
 
         await self.bot.change_presence(activity=discord.Activity(name=status, type=actiontype))
 
