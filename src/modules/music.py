@@ -305,7 +305,11 @@ class Player(wavelink.Player):
 
         else:
             track.requester = author
-            queue_pos = queuetracks([track])
+            queuetracks([track])
+            if queuetop:
+                queue_pos = 1
+            else:
+                queue_pos = len(self.dequeue)
 
             if self.is_playing():
                 embed = Embed(
@@ -497,7 +501,6 @@ class ExpiringView(discord.ui.View):
             item.disabled = True
         for msg in reversed(self.messages):
             await msg.edit(view=self)
-        #self.messages.clear()
         self.stop()
         if self.container:
             self.container.remove(self)
