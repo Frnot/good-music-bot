@@ -214,7 +214,6 @@ class Music(commands.Cog, name='Music'):
             if before.channel and before.channel is vc.channel: # If user was in bot's channel
                 # If there are no non-bot users in vc
                 if len(vc.channel.members) <= 1 or all(map(lambda member: member.bot, vc.channel.members)): 
-                    await vc.expire_all_views()
                     await vc.disconnect()
 
 
