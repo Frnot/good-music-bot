@@ -13,5 +13,5 @@ dependencies = [
     "discord.py >= 2.0.1",
     "python-dotenv",
     "aiosqlite",
-    "Wavelink >= 2.2.1",
+    "Wavelink >= 2.3.0",
 ]
