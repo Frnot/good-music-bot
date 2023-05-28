@@ -23,9 +23,9 @@ class Music(commands.Cog, name='Music'):
         self.bot = bot
 
         # Start Lavalink
-        #log.info("Starting Lavalink Server")
+        log.info("Starting Lavalink Server")
         # If you don't like this, I probably didn't ask.
-        #self.lavalink_proc = subprocess.Popen(["java", "-jar", "Lavalink.jar"], cwd="Lavalink")
+        self.lavalink_proc = subprocess.Popen(["java", "-jar", "Lavalink.jar"], cwd="Lavalink")
         # Connect to Lavalink
         bot.loop.create_task(self.connect_nodes())
 
@@ -48,7 +48,7 @@ class Music(commands.Cog, name='Music'):
 
     
     async def cog_unload(self): # TODO: this doesn't seem to work on linux
-        return
+        #return
         log.info("Attempting to stop Lavalink process")
         self.lavalink_proc.terminate()
         try:
