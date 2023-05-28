@@ -52,7 +52,7 @@ class Music(commands.Cog, name='Music'):
         log.info("Attempting to stop Lavalink process")
         self.lavalink_proc.terminate()
         try:
-            self.lavalink_proc.wait(timeout=1)
+            self.lavalink_proc.wait(timeout=5)
         except subprocess.TimeoutError:
             log.info("SIGTERM failed. sending SIGKILL")
             self.lavalink_proc.kill()
