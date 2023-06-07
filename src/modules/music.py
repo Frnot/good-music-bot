@@ -66,7 +66,7 @@ class Music(commands.Cog, name='Music'):
     ####################
 
 
-    @commands.command()
+    @commands.group(pass_context=True, invoke_without_command=True)
     async def play(self, ctx, *, request, queuetop=False):
         """Plays a track from a url or performs a query for request on youtube"""
         embed, view = await ctx.voice_client.playadd(ctx, request, ctx.author, queuetop)
@@ -78,6 +78,14 @@ class Music(commands.Cog, name='Music'):
     async def playnext(self, ctx, *, request):
         """Adds song to top of play queue"""
         await self.play(ctx, request=request, queuetop=True)
+
+    
+    @play.group(pass_context=True)
+    async def playlist(self, ctx, idx):
+        """Queues playlist on bot"""
+        playlists = await db.query_all(Playlist)
+        url = playlists[int(idx)-1].url
+        await self.play(ctx, request=url, queuetop=False)
 
 
     @commands.command()
@@ -163,6 +171,10 @@ class Music(commands.Cog, name='Music'):
         """Show all saved playlist urls"""
         playlists = await db.query_all(Playlist)
 
+        if not playlists:
+            await ctx.send("No playlists saved.")
+            return
+
         embeds = await generate_playlist_pages(playlists)
         if len(embeds) > 1:
             view = TrackList(embeds, author_id = ctx.author.id) if len(embeds) > 1 else None
@@ -171,7 +183,6 @@ class Music(commands.Cog, name='Music'):
             await ctx.send(embed=embeds[0])
 
 
-    
     @playlists.group(pass_context=True)
     async def add(self, ctx, url):
         """Add playlist to database"""
@@ -196,14 +207,6 @@ class Music(commands.Cog, name='Music'):
         id = playlists[int(idx)-1].playlist_id
         await db.delete_row(Playlist, id)
         await utils.general.send_confirmation(ctx)
-    
-    
-    @playlists.group(pass_context=True)
-    async def play(self, ctx, idx):
-        """Queues playlist on bot"""
-        playlists = await db.query_all(Playlist)
-        url = playlists[int(idx)-1].url
-        await ctx.voice_client.playadd(ctx, url, ctx.author, queuetop=False)
 
 
     @play.before_invoke
