@@ -27,7 +27,9 @@ log = logging.getLogger(__name__)
 
 # Get token from .env file
 load_dotenv()
-token = os.getenv("TOKEN")   
+token = os.getenv("TOKEN")
+assert token is not None, "No token in .env file"
+
 
 attempts = 5
 

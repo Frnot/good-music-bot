@@ -2,11 +2,14 @@ import logging
 
 import discord
 from discord.ext import commands
+from sqlalchemy.orm import mapped_column
+from sqlalchemy import Integer
 
 import utils.general
 from utils import db
 
 log = logging.getLogger(__name__)
+
 
 class Permissions(commands.Cog, name='Permissions'):
     def __init__(self, bot):
@@ -17,24 +20,24 @@ class Permissions(commands.Cog, name='Permissions'):
     @commands.command()
     @commands.is_owner()
     async def ban(self, ctx, user: discord.User):
-        """Add a user to ban list, removing their ability to use this bot"""
+        """Remove a user form whitelist, removing their ability to use this bot"""
 
-        user_banned = await self.query_banlist(user.id)
-        if user_banned:
+        user_access = await self.query_whitelist(user.id)
+        if not user_access:
             await ctx.send("User is already banned")
         else:
-            await self.add_to_banlist(user.id)
+            await self.remove_from_whitelist(user.id)
             await utils.general.send_confirmation(ctx)
 
 
     @commands.command()
     @commands.is_owner()
     async def unban(self, ctx, user: discord.User):
-        """Remove a user from ban list, returning their ability to use this bot"""
+        """Whitelist a user, giving them ability to use this bot"""
 
-        user_banned = await self.query_banlist(user.id)
-        if user_banned:
-            await self.remove_from_banlist(user.id)
+        user_access = await self.query_whitelist(user.id)
+        if not user_access:
+            await self.add_to_whitelist(user.id)
             await utils.general.send_confirmation(ctx)
         else:
             await ctx.send("User is not banned")
@@ -55,31 +58,33 @@ class Permissions(commands.Cog, name='Permissions'):
     async def has_permission(self, ctx):
         if await ctx.bot.is_owner(ctx.author): # anti-lockout
             return True
-        if await self.query_banlist(ctx.author.id):
+        if not await self.query_whitelist(ctx.author.id):
             raise UserIsBanned(f"{ctx.author.mention} eat shit!")
         else:
             return True
 
 
-    async def add_to_banlist(self, id):
-        await db.insert("banlist", [["user_id", id]])
+    async def add_to_whitelist(self, id):
+        user = Whitelist(user_id=id)
+        await db.insert_row(user)
 
 
-    async def remove_from_banlist(self, id):
-        await db.delete("banlist", ["user_id", id])
+    async def remove_from_whitelist(self, id):
+        await db.delete_row(Whitelist, id)
 
 
     @classmethod
-    async def query_banlist(cls, id):
-        try:
-            if await db.select("user_id", "banlist", "user_id", id) is not None:
-                return True
-            else:
-                return False
-        except Exception as e:
-            log.error(f"Error querying banlist database for id {id}")
-            return None
-        
+    async def query_whitelist(cls, id):            
+        result = await db.query(Whitelist, id)
+        return bool(result)
+
+
+
+class Whitelist(db.Base):
+    __tablename__ = "user_whitelist"
+
+    user_id = mapped_column(Integer, primary_key=True)
+
 
 
 class UserIsBanned(commands.CheckFailure):

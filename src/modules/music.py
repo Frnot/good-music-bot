@@ -513,11 +513,11 @@ class GatedView(ExpiringView):
         self.author_id = author_id
 
     async def interaction_check(self, interaction: discord.Interaction):
-        banned = await Permissions.query_banlist(interaction.user.id)
+        whitelisted = await Permissions.query_whitelist(interaction.user.id)
         is_author = interaction.user.id == self.author_id
         in_channel = interaction.user.voice.channel == interaction.guild.voice_client.channel if interaction.user.voice else False
 
-        if banned:
+        if not whitelisted: #TODO: or is not owner
             await interaction.response.send_message("Fuck you!", ephemeral=True, delete_after=10)
             return False
         elif not in_channel and not is_author:
