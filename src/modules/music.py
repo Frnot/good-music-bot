@@ -9,7 +9,10 @@ import discord
 import wavelink
 from discord import Embed
 from discord.ext import commands
+from sqlalchemy.orm import mapped_column
+from sqlalchemy import Integer, String
 
+from utils import db
 import utils.general
 import utils.rng
 from modules.permissions import Permissions
@@ -155,6 +158,54 @@ class Music(commands.Cog, name='Music'):
             await ctx.send(embed=embed)
 
 
+    @commands.group(pass_context=True, invoke_without_command=True)
+    async def playlists(self, ctx):
+        """Show all saved playlist urls"""
+        playlists = await db.query_all(Playlist)
+
+        embeds = await generate_playlist_pages(playlists)
+        if len(embeds) > 1:
+            view = TrackList(embeds, author_id = ctx.author.id) if len(embeds) > 1 else None
+            view.messages.append(await ctx.send(embed=embeds[0], view=view))
+        else: # dont paginate if only one page
+            await ctx.send(embed=embeds[0])
+
+
+    
+    @playlists.group(pass_context=True)
+    async def add(self, ctx, url):
+        """Add playlist to database"""
+        try:
+            ytplaylist = await  wavelink.NodePool.get_playlist(url, cls=wavelink.YouTubePlaylist)
+        except wavelink.WavelinkException:
+            await ctx.send(f"Error: url '{url}' did not return a youtube playlist")
+
+        playlist = Playlist(playlist_id=url,
+                            name=ytplaylist.name,
+                            url=url,
+                            track_count=len(ytplaylist.tracks)
+                            )
+        await db.insert_row(playlist)
+        await utils.general.send_confirmation(ctx)
+
+
+    @playlists.group(pass_context=True, aliases=["remove"])
+    async def delete(self, ctx, idx):
+        """Delete playlist from database"""
+        playlists = await db.query_all(Playlist)
+        id = playlists[int(idx)-1].playlist_id
+        await db.delete_row(Playlist, id)
+        await utils.general.send_confirmation(ctx)
+    
+    
+    @playlists.group(pass_context=True)
+    async def play(self, ctx, idx):
+        """Queues playlist on bot"""
+        playlists = await db.query_all(Playlist)
+        url = playlists[int(idx)-1].url
+        await ctx.voice_client.playadd(ctx, url, ctx.author, queuetop=False)
+
+
     @play.before_invoke
     @playnext.before_invoke
     @join.before_invoke
@@ -200,6 +251,7 @@ class Music(commands.Cog, name='Music'):
     @restart.error
     @replay.error
     @clear.error
+    @playlists.error
     async def error(self, ctx, exception):
         if isinstance(exception, commands.CheckFailure):
             await ctx.send(exception)
@@ -410,6 +462,7 @@ class Player(wavelink.Player):
     async def showqueue(self, requester):
         if track_list := list(self.dequeue):
             embeds = await self.generate_tracklists(track_list)
+            # dont paginate if only one page
             view = TrackList(embeds, author_id=requester.id) if len(embeds) > 1 else None
             return(embeds[0], view)
         else:
@@ -605,7 +658,6 @@ class MusicControls(GatedView):
 
 
 
-
 class Undo(ExpiringView):
     """Creates a discord.py view that adds an undo button.
 
@@ -639,3 +691,35 @@ class Undo(ExpiringView):
         button.style = discord.ButtonStyle.red
         await interaction.response.edit_message(view=self)
         self.undo_op[0](self.undo_op[1])
+
+
+
+async def generate_playlist_pages(playlists) -> list[discord.Embed]:
+        embeds = []
+        pagesize = 10
+        pagecount = math.ceil(len(playlists) / pagesize)
+        for idx in range(pagecount):
+            start_idx = idx*pagesize
+            playlists = playlists[start_idx:start_idx+pagesize]
+            
+            index, title = "", ""
+            for i,playlist in enumerate(playlists, start=1):
+                index += f"{start_idx+i}\n"
+                title += f"[{playlist.name[:42]}]({playlist.url})\n"
+
+            embed = Embed(title = f"Saves playlists: {idx+1} / {pagecount}",color = utils.rng.random_color())
+            embed.add_field(name="#", value = index)
+            embed.add_field(name="Playlist", value = title)
+
+            embeds.append(embed)
+        return embeds
+
+
+
+class Playlist(db.Base):
+    __tablename__ = "youtube_playlists"
+
+    playlist_id   = mapped_column(String, primary_key=True)
+    name          = mapped_column(String)
+    url           = mapped_column(String)
+    track_count   = mapped_column(Integer)

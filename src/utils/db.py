@@ -3,14 +3,17 @@ import aiosqlite
 import asyncio
 import sys
 import logging
-log = logging.getLogger(__name__)
+from typing import TypeVar, List
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
+T = TypeVar('T')
+log = logging.getLogger(__name__)
 
 
 db_file = 'data.db'
@@ -38,13 +41,13 @@ def close():
     log.info("Closed database connection.")
 
 
-async def insert_row(entry):
+async def insert_row(entry) -> None:
     async with async_session() as session:
         async with session.begin():
             session.add(entry)
 
 
-async def delete_row(entry_type, id):
+async def delete_row(entry_type, id) -> None:
     async with async_session() as session:
         async with session.begin():
             result = await session.get(entry_type, id)
@@ -52,9 +55,14 @@ async def delete_row(entry_type, id):
                 await session.delete(result)
 
 
-async def query(entry_type, id):
+async def query(entry_type: T, id) -> T:
     async with async_session() as session:
         return await session.get(entry_type, id)
+
+
+async def query_all(entry_type: T) -> List[T]:
+    async with async_session() as session:
+        return (await session.scalars(select(entry_type))).all()
 
 
 
