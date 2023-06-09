@@ -5,7 +5,7 @@ import sys
 import logging
 from typing import TypeVar, List
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,9 +60,23 @@ async def query(entry_type: T, id) -> T:
         return await session.get(entry_type, id)
 
 
-async def query_all(entry_type: T) -> List[T]:
+async def query_all(entry_type: T, order_by=None) -> List[T]:
     async with async_session() as session:
-        return (await session.scalars(select(entry_type))).all()
+        if order_by:
+            return (await session.scalars(select(entry_type).order_by(order_by))).all()
+        else:
+            return (await session.scalars(select(entry_type))).all()
+
+
+async def LRU(entry, init=False) -> None:
+    table = entry.__class__
+    async with async_session() as session:
+        async with session.begin():
+            if entry.lru != 0:
+                await session.execute(update(table).where(table.id != entry.id and table.lru < entry.lru).values(lru=table.lru+1))
+                await session.execute(update(table).where(table.id == entry.id).values(lru=0))
+            elif init:
+                await session.execute(update(table).where(table.id != entry.id).values(lru=table.lru+1))
 
 
 

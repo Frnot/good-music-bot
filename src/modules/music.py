@@ -84,8 +84,9 @@ class Music(commands.Cog, name='Music'):
     async def playlist(self, ctx, idx):
         """Queues playlist on bot"""
         playlists = await db.query_all(Playlist)
-        url = playlists[int(idx)-1].url
-        await self.play(ctx, request=url, queuetop=False)
+        playlist = playlists[int(idx)-1]
+        await db.LRU(playlist)
+        await self.play(ctx, request=playlist.url, queuetop=False)
 
 
     @commands.command()
@@ -166,10 +167,10 @@ class Music(commands.Cog, name='Music'):
             await ctx.send(embed=embed)
 
 
-    @commands.group(pass_context=True, invoke_without_command=True)
+    @commands.group(pass_context=True, invoke_without_command=True, aliases=["playlist"])
     async def playlists(self, ctx):
         """Show all saved playlist urls"""
-        playlists = await db.query_all(Playlist)
+        playlists = await db.query_all(Playlist, order_by=Playlist.lru)
 
         if not playlists:
             await ctx.send("No playlists saved.")
@@ -191,12 +192,13 @@ class Music(commands.Cog, name='Music'):
         except wavelink.WavelinkException:
             await ctx.send(f"Error: url '{url}' did not return a youtube playlist")
 
-        playlist = Playlist(playlist_id=url,
+        playlist = Playlist(id=url,
                             name=ytplaylist.name,
                             url=url,
                             track_count=len(ytplaylist.tracks)
                             )
         await db.insert_row(playlist)
+        await db.LRU(playlist, init=True)
         await utils.general.send_confirmation(ctx)
 
 
@@ -204,13 +206,14 @@ class Music(commands.Cog, name='Music'):
     async def delete(self, ctx, idx):
         """Delete playlist from database"""
         playlists = await db.query_all(Playlist)
-        id = playlists[int(idx)-1].playlist_id
+        id = playlists[int(idx)-1].id
         await db.delete_row(Playlist, id)
         await utils.general.send_confirmation(ctx)
 
 
     @play.before_invoke
     @playnext.before_invoke
+    @playlist.before_invoke
     @join.before_invoke
     async def ensure_voice(self, ctx):
         if ctx.voice_client is None:
@@ -722,7 +725,8 @@ async def generate_playlist_pages(playlists) -> list[discord.Embed]:
 class Playlist(db.Base):
     __tablename__ = "youtube_playlists"
 
-    playlist_id   = mapped_column(String, primary_key=True)
-    name          = mapped_column(String)
-    url           = mapped_column(String)
-    track_count   = mapped_column(Integer)
+    id          = mapped_column(String, primary_key=True)
+    name        = mapped_column(String)
+    url         = mapped_column(String)
+    track_count = mapped_column(Integer)
+    lru         = mapped_column(Integer, default=0)
