@@ -713,7 +713,7 @@ async def generate_playlist_pages(playlists) -> list[discord.Embed]:
                 index += f"{start_idx+i}\n"
                 title += f"[{playlist.name[:42]}]({playlist.url})\n"
 
-            embed = Embed(title = f"Saves playlists: {idx+1} / {pagecount}",color = utils.rng.random_color())
+            embed = Embed(title = f"Saved playlists: {idx+1} / {pagecount}",color = utils.rng.random_color())
             embed.add_field(name="#", value = index)
             embed.add_field(name="Playlist", value = title)
 
