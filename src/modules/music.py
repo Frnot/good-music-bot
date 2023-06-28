@@ -344,7 +344,7 @@ class Player(wavelink.Player):
             except wavelink.WavelinkException:
                 track = (await self.current_node.get_tracks(query=request, cls=wavelink.YouTubeTrack))[0]
         else:
-            track = (await self.current_node.get_tracks(query=f"ytsearch:{request}", cls=wavelink.YouTubeTrack))[0]
+            track = (await wavelink.YouTubeTrack.search(request))[0]
 
         if playlist:
             for track in playlist.tracks:
