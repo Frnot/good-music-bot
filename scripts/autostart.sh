@@ -3,8 +3,10 @@
 # Make script executable
 # chmod +x autostart.sh
 
-# Put file in crontab
-# @reboot sleep 30 && /<bot_directory_path>/scripts/autostart.sh
+# Put following lines in crontab:
+
+# SHELL=/bin/bash
+# @reboot sleep 30 && /bot/scripts/autostart.sh
 
 SESSION_NAME=bot
 
@@ -15,4 +17,5 @@ tmux_command() {
 tmux new -d -s $SESSION_NAME
 
 tmux_command cd /bot
+tmux_command source /bot/.venv/bin/activate
 tmux_command python3 src/main.py

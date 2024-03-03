@@ -38,6 +38,7 @@ class Music(commands.Cog, name='Music'):
     async def connect_nodes(self):
         """Connect to the Lavalink nodes."""
         await self.bot.wait_until_ready()
+        # TODO: wait until lavalink is ready
 
         log.debug("Attempting to connect to Lavalink Server")
         node: wavelink.Node = wavelink.Node(uri='http://localhost:2333', password=os.getenv("Lavalink_Password"))
