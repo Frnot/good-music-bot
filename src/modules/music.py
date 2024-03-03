@@ -41,13 +41,13 @@ class Music(commands.Cog, name='Music'):
 
         log.debug("Attempting to connect to Lavalink Server")
         node: wavelink.Node = wavelink.Node(uri='http://localhost:2333', password=os.getenv("Lavalink_Password"))
-        await wavelink.NodePool.connect(client=self.bot, nodes=[node])
+        await wavelink.Pool.connect(client=self.bot, nodes=[node])
 
 
     @commands.Cog.listener()
-    async def on_wavelink_node_ready(self, node: wavelink.Node):
+    async def on_wavelink_node_ready(self, payload: wavelink.NodeReadyEventPayload):
         """Event fired when a node has finished connecting."""
-        log.info(f'Lavalink Node: <{node.id}> is ready!')
+        log.info(f"Wavelink Node connected: {payload.node} | Resumed: {payload.resumed}")
 
     
     async def cog_unload(self): # TODO: this doesn't seem to work on linux
@@ -113,7 +113,7 @@ class Music(commands.Cog, name='Music'):
     async def skip(self, ctx, num=None):
         """Skip [num] tracks in queue.
         Will only skip current playing track by default"""
-        if await ctx.voice_client.skip(num):
+        if await ctx.voice_client.skip_tracks(num):
             await utils.general.send_confirmation(ctx)
 
 
@@ -241,7 +241,7 @@ class Music(commands.Cog, name='Music'):
     async def check_playing(self, ctx):
         if ctx.voice_client is None:
             raise commands.CheckFailure("Bot is not connected to a voice channel.")
-        if not ctx.voice_client.is_playing():
+        if not ctx.voice_client.playing:
             raise commands.CheckFailure("Nothing is playing")
 
 
@@ -338,29 +338,27 @@ class Player(wavelink.Player):
         else:
             queuetracks: function = self.dequeue.extend
 
-        if re.match(r'https?://(?:www\.)?.+', request):
-            try:
-                playlist = await self.current_node.get_playlist(query=request, cls=wavelink.YouTubePlaylist)
-            except wavelink.WavelinkException:
-                track = (await self.current_node.get_tracks(query=request, cls=wavelink.YouTubeTrack))[0]
-        else:
-            track = (await wavelink.YouTubeTrack.search(request))[0]
 
-        if playlist:
-            for track in playlist.tracks:
+        tracks: wavelink.Search = await wavelink.Playable.search(request)
+        if not tracks:
+            await ctx.send(f"Could not find any tracks with query \"{request}\"")
+            return
+
+        if isinstance(tracks, wavelink.Playlist):
+            for track in tracks:
                 track.requester = author 
-            queuetracks(playlist.tracks)
+            queuetracks(tracks)
 
             embed = Embed(
                 title = f"Queued playlist",
-                description = playlist.name,
+                description = tracks.name,
                 color = utils.rng.random_color()
             )
             view = Undo(container=self.misc_views,
-                        undo_op=(lambda tracks : [self.dequeue.remove(track) for track in tracks], playlist.tracks),
+                        undo_op=(lambda tracks : [self.dequeue.remove(track) for track in tracks], tracks),
                         requester_id=author.id)
-
         else:
+            track = tracks[0]
             track.requester = author
             queuetracks([track])
             if queuetop:
@@ -368,21 +366,20 @@ class Player(wavelink.Player):
             else:
                 queue_pos = len(self.dequeue)
 
-            if self.is_playing():
+            if self.playing:
                 embed = Embed(
                     title = f"Track queued - Position {queue_pos}",
                     description = track.title,
                     url = track.uri,
                     color = utils.rng.random_color()
                 )
-                embed.set_thumbnail(url=track.thumbnail)
+                embed.set_thumbnail(url=track.artwork)
                 view = Undo(container=self.misc_views,
                             undo_op=(lambda track : self.dequeue.remove(track), track),
-                            requester_id=author.id)
-                
+                            requester_id=author.id)      
 
         # If bot isn't playing, process queue
-        if not self.is_playing() and not self.spawn_ctx:
+        if not self.playing and not self.spawn_ctx:
             self.spawn_ctx = ctx
             track = self.dequeue.popleft()
             await self.play(track)
@@ -399,18 +396,18 @@ class Player(wavelink.Player):
             raise commands.CommandError("Error: please enter a valid index number")
 
 
-    async def skip(self, num=None):
+    async def skip_tracks(self, num=None):
         self.loop_track = False
         if not num:
             self.skipped_tracks = [self.current]
-            await self.stop()
+            await self.skip()
             return True
         else:
             try:
                 self.skipped_tracks = [self.current]
                 for _ in range(int(num)-1):
                     self.skipped_tracks.append(self.dequeue.popleft())
-                await self.stop()
+                await self.skip()
                 return True
             except IndexError:
                 raise commands.CommandError("Error: please enter a valid index number")
@@ -422,7 +419,7 @@ class Player(wavelink.Player):
             self.dequeue.appendleft(self.current)
             self.dequeue.extendleft(reversed(self.skipped_tracks))
             self.skipped_tracks = None
-            await self.stop()
+            await self.skip()
             return True
         else:
             return False
@@ -435,7 +432,7 @@ class Player(wavelink.Player):
             else:
                 seconds = utils.general.timestr_to_secs(time)
                 seektime = seconds*1000
-                if seconds > self.current.duration:
+                if seconds > self.current.length:
                     raise ValueError
             await super().seek(seektime)
         except ValueError:
@@ -447,7 +444,7 @@ class Player(wavelink.Player):
 
     
     async def replay(self, ctx):
-        if not self.is_playing() and not self.spawn_ctx and self.last_track:
+        if not self.playing and not self.spawn_ctx and self.last_track:
             self.spawn_ctx = ctx
             await self.play(self.last_track)
             return True
@@ -506,15 +503,15 @@ class Player(wavelink.Player):
         )
         if track.requester:
             embed.add_field(name="Requested by:", value=track.requester.mention, inline=False)
-        if (player_position := self.position/1000) == (track_duration := track.duration/1000):
+        if (player_position := self.position/1000) == (track_duration := track.length/1000):
             position = f"\n0:00 / {utils.general.sec_to_minsec(int(track_duration))}"
             time_remaining = track_duration # track position is initialzied to duration?
         else:
             position = f"\n{utils.general.sec_to_minsec(int(player_position))} / {utils.general.sec_to_minsec(int(track_duration))}"
             time_remaining = track_duration - player_position
         embed.add_field(name="Position", value=position, inline=False)
-        if hasattr(track, "thumbnail"):
-            embed.set_thumbnail(url=track.thumbnail)
+        if track.artwork:
+            embed.set_thumbnail(url=track.artwork)
         return embed, time_remaining
 
 
@@ -628,7 +625,7 @@ class MusicControls(GatedView):
     @discord.ui.button(label='Restart', custom_id="restart", style=discord.ButtonStyle.grey)
     async def restart_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.vc.restart()
-        self.timeout = self.vc.current.duration
+        self.timeout = self.vc.current.length
         embed, time_remaining = await self.vc.generate_status()
         await interaction.response.edit_message(embed=embed)
 
@@ -643,7 +640,7 @@ class MusicControls(GatedView):
 
     @discord.ui.button(label='Skip', custom_id="skip", style=discord.ButtonStyle.grey)
     async def skip_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.vc.skip()
+        await self.vc.skip_tracks()
         button.style = discord.ButtonStyle.red
         await interaction.response.edit_message(view=self)
         await self.expire()
