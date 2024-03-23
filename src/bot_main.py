@@ -12,6 +12,7 @@ else:
 # Import modules
 from utils import db
 from modules.admin_commands import AdminCommands
+from modules.favorite_song import Favorite_Song
 from modules.music import Music
 from modules.permissions import Permissions
 
@@ -48,6 +49,7 @@ class Bot(dcommands.Bot):
 
         # Load modules
         await bot.add_cog(AdminCommands(bot))
+        await bot.add_cog(Favorite_Song(bot))
         await bot.add_cog(Music(bot))
         await bot.add_cog(Permissions(bot))
         # Load permission checker

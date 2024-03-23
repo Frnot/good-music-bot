@@ -68,7 +68,7 @@ class Music(commands.Cog, name='Music'):
 
 
     @commands.group(pass_context=True, invoke_without_command=True)
-    async def play(self, ctx, *, request, queuetop=False):
+    async def play(self, ctx, *, request, queuetop=False, playnow=False, playskip=False):
         """Plays a track from a url or performs a query for request on youtube"""
         embed, view = await ctx.voice_client.playadd(ctx, request, ctx.author, queuetop)
         if embed and view:
@@ -79,6 +79,28 @@ class Music(commands.Cog, name='Music'):
     async def playnext(self, ctx, *, request):
         """Adds song to top of play queue"""
         await self.play(ctx, request=request, queuetop=True)
+
+    
+    @commands.command()
+    async def playnow(self, ctx, *, request):
+        """Plays requested song immediately, adds a currently playing song to top of queue"""
+        embed, view = await ctx.voice_client.playnow(request, ctx.author, save_current=True)
+        if embed:
+            if view:
+                view.messages.append(await ctx.send(embed=embed, view=view))
+            else:
+                await ctx.send(embed=embed)
+
+    
+    @commands.command()
+    async def playskip(self, ctx, *, request):
+        """Plays requested song immediately, skipping any currently playing song"""
+        embed, view = await ctx.voice_client.playnow(request, ctx.author, save_current=False)
+        if embed:
+            if view:
+                view.messages.append(await ctx.send(embed=embed, view=view))
+            else:
+                await ctx.send(embed=embed)
 
     
     @play.group(pass_context=True)
@@ -236,6 +258,8 @@ class Music(commands.Cog, name='Music'):
 
 
     @skip.before_invoke
+    @playnow.before_invoke
+    @playskip.before_invoke
     @seek.before_invoke
     @restart.before_invoke
     @np.before_invoke
@@ -244,10 +268,33 @@ class Music(commands.Cog, name='Music'):
             raise commands.CheckFailure("Bot is not connected to a voice channel.")
         if not ctx.voice_client.playing:
             raise commands.CheckFailure("Nothing is playing")
+    
+
+    @play.before_invoke
+    @playnext.before_invoke
+    @playlist.before_invoke
+    @join.before_invoke
+    @queue.before_invoke
+    @deskip.before_invoke
+    @remove.before_invoke
+    @clear.before_invoke
+    @replay.before_invoke
+    @stop.before_invoke
+    @skip.before_invoke
+    @playnow.before_invoke
+    @playskip.before_invoke
+    @seek.before_invoke
+    @restart.before_invoke
+    @np.before_invoke
+    async def ensure_spawn_ctx(self, ctx):
+        if not ctx.voice_client.spawn_ctx:
+            ctx.voice_client.spawn_ctx = ctx
 
 
     @play.error
     @playnext.error
+    @playnow.error
+    @playskip.error
     @join.error
     @np.error
     @queue.error
@@ -280,7 +327,8 @@ class Music(commands.Cog, name='Music'):
     async def on_wavelink_track_start(self, payload):
         vc: Player = payload.player
         if not vc.loop_track:
-            await vc.status(vc.spawn_ctx.channel)
+            if vc.spawn_ctx:
+                await vc.status(vc.spawn_ctx.channel)
 
 
     @commands.Cog.listener()
@@ -377,16 +425,59 @@ class Player(wavelink.Player):
                 embed.set_thumbnail(url=track.artwork)
                 view = Undo(container=self.misc_views,
                             undo_op=(lambda track : self.dequeue.remove(track), track),
-                            requester_id=author.id)      
+                            requester_id=author.id)
 
         # If bot isn't playing, process queue
         if not self.playing and not self.spawn_ctx:
             self.spawn_ctx = ctx
             track = self.dequeue.popleft()
             await self.play(track)
-            self.last_track = track
+            #self.last_track = track
 
         return (embed, view)
+
+    
+    async def playnow(self, request, author, save_current):
+        embed = view = playlist = track = None
+
+        tracks: wavelink.Search = await wavelink.Playable.search(request)
+        if not tracks:
+            embed = Embed(
+                title = f"Error playing track",
+                description = f"Could not find any tracks with query \"{request}\"",
+                color = utils.rng.random_color()
+            )
+            return embed, None
+
+        if save_current:
+            self.dequeue.appendleft(self.current)
+            embed = Embed(
+                title = f"Saved current track to top of queue",
+                description = self.current.title,
+                color = utils.rng.random_color()
+            )
+            embed.set_thumbnail(url=self.current.artwork)
+
+
+        if isinstance(tracks, wavelink.Playlist):
+            if save_current:
+                embed = Embed(
+                    title = f"Playing playlist immediately",
+                    description = tracks.name,
+                    color = utils.rng.random_color()
+                )
+            for track in tracks:
+                track.requester = author 
+            self.dequeue.extendleft(reversed(tracks))
+            await self.skip()
+        else:
+            track = tracks[0]
+            track.requester = author
+            self.dequeue.appendleft(track)
+            await self.skip()
+
+        return (embed, None)
+
 
 
     async def remove(self, idx):
