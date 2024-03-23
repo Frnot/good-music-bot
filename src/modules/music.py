@@ -242,6 +242,7 @@ class Music(commands.Cog, name='Music'):
         if ctx.voice_client is None:
             if ctx.author.voice:
                 await ctx.author.voice.channel.connect(cls=Player)
+                ctx.voice_client.spawn_ctx = ctx
             else:
                 raise commands.CheckFailure("You are not connected to a voice channel.")
 
@@ -255,6 +256,8 @@ class Music(commands.Cog, name='Music'):
     async def check_voice(self, ctx):
         if ctx.voice_client is None:
             raise commands.CheckFailure("Bot is not connected to a voice channel.")
+        elif not ctx.voice_client.spawn_ctx:
+            ctx.voice_client.spawn_ctx = ctx
 
 
     @skip.before_invoke
@@ -266,29 +269,10 @@ class Music(commands.Cog, name='Music'):
     async def check_playing(self, ctx):
         if ctx.voice_client is None:
             raise commands.CheckFailure("Bot is not connected to a voice channel.")
+        elif not ctx.voice_client.spawn_ctx:
+            ctx.voice_client.spawn_ctx = ctx
         if not ctx.voice_client.playing:
             raise commands.CheckFailure("Nothing is playing")
-    
-
-    @play.before_invoke
-    @playnext.before_invoke
-    @playlist.before_invoke
-    @join.before_invoke
-    @queue.before_invoke
-    @deskip.before_invoke
-    @remove.before_invoke
-    @clear.before_invoke
-    @replay.before_invoke
-    @stop.before_invoke
-    @skip.before_invoke
-    @playnow.before_invoke
-    @playskip.before_invoke
-    @seek.before_invoke
-    @restart.before_invoke
-    @np.before_invoke
-    async def ensure_spawn_ctx(self, ctx):
-        if not ctx.voice_client.spawn_ctx:
-            ctx.voice_client.spawn_ctx = ctx
 
 
     @play.error
@@ -428,8 +412,7 @@ class Player(wavelink.Player):
                             requester_id=author.id)
 
         # If bot isn't playing, process queue
-        if not self.playing and not self.spawn_ctx:
-            self.spawn_ctx = ctx
+        if not self.playing:#  and not self.spawn_ctx: TODO: protect against race condition
             track = self.dequeue.popleft()
             await self.play(track)
             #self.last_track = track
