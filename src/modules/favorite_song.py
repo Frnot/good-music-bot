@@ -61,8 +61,12 @@ favorite list```"""
     async def show(self, ctx):
         """Show all users favorites saved in DB"""
         all_favorites = await db.query_all(FavoriteSong)
-        favorite = [f"<@{e.id}> : <{e.song}>" for e in all_favorites]
-        await ctx.send("\n".join(favorite))
+        if all_favorites:
+            favorite = [f"<@{e.id}> : <{e.song}>" for e in all_favorites]
+            await ctx.send("\n".join(favorite))
+        else:
+            await ctx.send("Nobody has a favorite song")
+
 
 
     @favorite.error
