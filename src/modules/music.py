@@ -19,10 +19,7 @@ from modules.permissions import Permissions
 
 log = logging.getLogger(__name__)
 
-table = {
-    256620040831369216 : "https://www.youtube.com/watch?v=EwC9ov-Uw90",
-    221794936452808704 : "https://www.youtube.com/watch?v=0mnjT_J-9_o",
-}
+
 
 class Music(commands.Cog, name='Music'):
     def __init__(self, bot):
@@ -267,7 +264,8 @@ class Music(commands.Cog, name='Music'):
             await ctx.send(exception)
         else:
             log.exception(exception)
-
+    
+    
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
         """Disconnects bot from voice channel if no users are connected and clears queue if bot is disconnected"""
@@ -276,19 +274,6 @@ class Music(commands.Cog, name='Music'):
                 # If there are no non-bot users in vc
                 if len(vc.channel.members) <= 1 or all(map(lambda member: member.bot, vc.channel.members)): 
                     await vc.disconnect()
-
-        # Automatically play someone's favorite song when they join the call
-        switched_to_current = member.guild.voice_client and before.channel != member.guild.voice_client.channel and after.channel == member.guild.voice_client.channel
-        if not before.channel or switched_to_current:
-            if member.id in table:
-                track = await wavelink.Playable.search(table[member.id])
-                if member.guild.voice_client and self.playing:
-                    if self.playing == track:
-                        return
-                    else:
-                        self.dequeue.extendleft(self.current)
-                await self.play(track)
-
 
 
     @commands.Cog.listener()
