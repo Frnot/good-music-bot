@@ -88,24 +88,23 @@ favorite list```"""
         """Automatically play someone's favorite song when they join the call"""
         if not after.channel or member.id == self.bot.user.id: # if user disconnected or we joined
             return
-        if before.channel == after.channel: # state update
+        if before.channel == after.channel: # state update (not channel change)
             return
         if player := member.guild.voice_client: 
             if after.channel != player.channel: # if bot is in a channel but the user joined a different one
                 return
-        else:
+        if not (favorite := await db.query(FavoriteSong, member.id)):
+            return
+        if not player:
             player = await after.channel.connect(cls=Player)
-
-        favorite = await db.query(FavoriteSong, member.id)
-        if favorite:
-            if player.playing:
-                if player.current.uri == favorite.song:
-                    return
-                await player.playnow(favorite.song, self.bot.user, save_current=True)
-            else:
-                track = (await wavelink.Playable.search(favorite.song))[0]
-                track.requester = self.bot.user
-                await player.play(track)
+        if player.playing:
+            if player.current.uri == favorite.song:
+                return
+            await player.playnow(favorite.song, self.bot.user, save_current=True)
+        else:
+            track = (await wavelink.Playable.search(favorite.song))[0]
+            track.requester = self.bot.user
+            await player.play(track)
 
 
 class FavoriteSong(db.Base):

@@ -239,7 +239,10 @@ class Music(commands.Cog, name='Music'):
     @playlist.before_invoke
     @join.before_invoke
     async def ensure_voice(self, ctx):
-        if ctx.voice_client is None:
+        if ctx.voice_client:
+            if not ctx.voice_client.spawn_ctx:
+                ctx.voice_client.spawn_ctx = ctx
+        else:
             if ctx.author.voice:
                 await ctx.author.voice.channel.connect(cls=Player)
                 ctx.voice_client.spawn_ctx = ctx
@@ -256,8 +259,6 @@ class Music(commands.Cog, name='Music'):
     async def check_voice(self, ctx):
         if ctx.voice_client is None:
             raise commands.CheckFailure("Bot is not connected to a voice channel.")
-        elif not ctx.voice_client.spawn_ctx:
-            ctx.voice_client.spawn_ctx = ctx
 
 
     @skip.before_invoke
