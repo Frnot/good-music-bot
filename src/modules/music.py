@@ -292,12 +292,13 @@ class Music(commands.Cog, name='Music'):
     @clear.error
     @playlists.error
     async def error(self, ctx, exception):
+        log.debug(exception)
         if isinstance(exception, commands.CheckFailure):
             await ctx.send(exception)
         else:
-            log.exception(exception)
-    
-    
+            await ctx.send(exception)
+
+
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
         """Disconnects bot from voice channel if no users are connected and clears queue if bot is disconnected"""
