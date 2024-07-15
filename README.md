@@ -1,7 +1,12 @@
 # good-music-bot
 a not awful discord music bot
 
-run `pip install .` to install required dependencies
+to installed required dependencies run:
+```
+python -m venv .venv
+source .venv/bin/activate
+pip install .
+```
 
 ### API docs
 https://discordpy.readthedocs.io/en/latest/api.html#
